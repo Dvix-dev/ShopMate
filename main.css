@@ -1,0 +1,87 @@
+@import url(https://fonts.googleapis.com/css?family=Caveat:regular,500,600,700);
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background-color: #f8f8f6;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.container {
+  background: white;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+  width: 320px;
+}
+
+header h1 {
+  color: #35BDB2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+}
+
+h1 > img {
+  height: 35px;
+}
+
+header h2 {
+  color: #205746;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+}
+
+#shopping-list {
+    font-family: 'caveat';
+    font-size: 25px;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+}
+
+li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #d8dad8;
+}
+
+li span {
+  flex: 1;
+}
+
+button {
+  background-color: #28A745;
+  color: white;
+  border: none;
+  padding: 0.5rem 0.8rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #218838;
+}
+
+.input-group {
+  display: flex;
+  margin-top: 1rem;
+}
+
+.input-group input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #d8dad8;
+  border-radius: 5px 0 0 5px;
+}
+
+.input-group button {
+  border-radius: 0 5px 5px 0;
+}
