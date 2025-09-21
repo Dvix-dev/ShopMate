@@ -2,19 +2,27 @@
 
 body {
   font-family: 'Poppins', sans-serif;
-  background-color: #f8f8f6;
+  background-color: #efefef;
+  margin: 0;
   display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
+  /* width: 74%; */
+  flex-direction: column;
 }
 
 .container {
   background: white;
-  padding: 2rem;
+  padding: 1rem;
   border-radius: 10px;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-  width: 320px;
+  border: 1px solid #d7d7d7;
+  /* box-shadow: 0 4px 10px rgba(0,0,0,0.1); */
+  width: 80%;
+  margin: 0 auto 20px;
+}
+
+header {
+  background-color: white;
+  border-bottom: 1px solid #d7d7d7;
+  margin-bottom: 20px;
 }
 
 header h1 {
@@ -29,15 +37,16 @@ h1 > img {
   height: 35px;
 }
 
-header h2 {
+#list-header h2 {
   color: #205746;
-  font-size: 1rem;
+  font-size: 23px;
+  text-decoration: underline;
   margin-bottom: 1rem;
 }
 
 #shopping-list {
     font-family: 'caveat';
-    font-size: 25px;
+    font-size: 20px;
 }
 
 ul {
