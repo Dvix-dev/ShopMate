@@ -19,19 +19,23 @@
 </header>
 
 <body>
-    <div class="container">
+  <div class="container">
     <div id="list-header">
       <h2>Lista de Compra Conjunta</h2>
     </div>
 
-    <ul id="shopping-list"></ul>
+    <form id="checklist">
+      <!-- Los ítems se insertarán aquí por JS -->
+    </form>
 
     <div class="input-group">
       <input type="text" id="item-input" placeholder="Nuevo item" />
-      <button id="add-btn">Añadir</button>
+      <button type="button" id="add-btn">Añadir</button>
     </div>
+
+    <button type="button" id="validar-btn">Validar compra ✔</button>
   </div>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

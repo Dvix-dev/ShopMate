@@ -1,0 +1,65 @@
+let lista = JSON.parse(localStorage.getItem('lista')) || [];
+
+const checklistEl = document.getElementById('checklist');
+const inputEl = document.getElementById('item-input');
+const addBtn = document.getElementById('add-btn');
+const validarBtn = document.getElementById('validar-btn');
+
+function guardarLista() {
+  localStorage.setItem('lista', JSON.stringify(lista));
+}
+
+function renderLista() {
+  checklistEl.innerHTML = '';
+  lista.forEach((item, index) => {
+    const parent = document.createElement('div');
+    parent.className = 'list-item'
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = `item-${index}`;
+    checkbox.checked = item.comprado || false;
+    checkbox.addEventListener('change', () => {
+      lista[index].comprado = checkbox.checked;
+      guardarLista();
+      toggleValidarBtn();
+    });
+
+    const label = document.createElement('label');
+    label.setAttribute('for', `item-${index}`);
+    label.textContent = item.nombre;
+    
+    checklistEl.appendChild(parent);
+    parent.appendChild(checkbox);
+    parent.appendChild(label);
+  });
+}
+
+function addItem() {
+  const nombre = inputEl.value.trim();
+  if (nombre) {
+    lista.push({ nombre, comprado: false });
+    guardarLista();
+    renderLista();
+    inputEl.value = '';
+    inputEl.focus();
+  }
+}
+
+function validarComprados() {
+  lista = lista.filter(item => !item.comprado);
+  guardarLista();
+  renderLista();
+  toggleValidarBtn();
+}
+
+function toggleValidarBtn() {
+  const hayMarcados = lista.some(item => item.comprado);
+  document.getElementById('validar-btn').style.display = hayMarcados ? 'block' : 'none';
+}
+
+addBtn.addEventListener('click', addItem);
+inputEl.addEventListener('keypress', e => { if (e.key === 'Enter') addItem(); });
+validarBtn.addEventListener('click', validarComprados);
+
+renderLista();
+toggleValidarBtn();
