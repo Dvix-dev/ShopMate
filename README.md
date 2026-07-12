@@ -133,9 +133,11 @@ ShopMate/
 ├── firebase-config.example.js  # Plantilla con placeholders (commiteada, Segura)
 ├── firebase-config.js        # Loader que prefiere .local.js y cae al .example.js
 ├── firebase-config.local.js  # ⚠️ NO COMMITEAR · Contiene tus claves reales (gitignored)
-├── database.rules.json       # Reglas RTDB endurecidas para aplicar en Firebase Console
+├── database.rules.json       # Reglas RTDB endurecidas (pendiente de deploy con firebase-tools)
+├── firebase.json             # Config de firebase-tools (apunta a database.rules.json)
+├── .firebaserc               # Alias de proyecto: shopmate-e9195
 ├── index.html                # Página principal (renombrada desde list.html)
-├── app.js                    # Lógica + integración Firebase (importa config del loader)
+├── app.js                    # Lógica + integración Firebase (importa config del loader, sin claves)
 ├── main.css                  # Estilos
 └── assets/
     ├── icon.ico              # Favicon  ⚠️ vacío en repo
@@ -146,18 +148,7 @@ ShopMate/
 
 ## 🔥 Configuración de Firebase y seguridad
 
-> ⚠️ **Estado actual:** el `app.js` que vino del SFTP contiene las claves reales **hardcoded**. Este commit añade el scaffolding seguro pero **no toca `app.js`**. Refactoriza manualmente `app.js` siguiendo la receta "Migración clásica" más abajo.
-
-### Patrón seguro (recomendado)
-
-1. **Crea tu configuración local** (gitignored):
-   ```bash
-   cp firebase-config.example.js firebase-config.local.js
-   ```
-2. **Edita `firebase-config.local.js`** y sustituye los placeholders (`<TU_API_KEY>`, etc.) por los valores reales de tu consola Firebase:
-   - <https://console.firebase.google.com/project/shopmate-e9195/settings/general>
-3. **`app.js` importa la config** desde `./firebase-config.js`, que es un loader transparente — prioriza `firebase-config.local.js` y, si no existe, cae al example (que tiene placeholders, fallaría en runtime pero no expone secretos).
-4. **Nunca commitees** `firebase-config.local.js` — está en `.gitignore`.
+> ✅ **Estado actual:** la migración ya está aplicada. `app.js` ya **no contiene claves reales** — importa `firebaseConfig` desde `./firebase-config.js`, que carga las claves desde `firebase-config.local.js` (gitignored). Queda como **único paso pendiente** desplegar las reglas endurecidas a Firebase (requiere login interactivo).
 
 ### Flujo de carga
 
@@ -168,6 +159,13 @@ app.js
        └─ si no, fallback a firebase-config.example.js (placeholders)
 ```
 
+### Patrón seguro (cómo se creó)
+
+1. **`firebase-config.example.js`** — plantilla con placeholders (`<TU_API_KEY>`, etc.). Se commitea y sirve como fallback de desarrollo sin secretos.
+2. **`firebase-config.js`** — loader con `top-level await` + `await import(...)` dinámico que prioriza `.local.js` y cae al `.example.js`. Se commitea.
+3. **`firebase-config.local.js`** — gitignored. Contiene las claves reales de tu proyecto. Es el único archivo donde van credenciales.
+4. **`app.js`** — `import { firebaseConfig } from "./firebase-config.js";` y `initializeApp(firebaseConfig)`. Nunca tiene claves hardcoded.
+
 ### Por qué NO `.env` directamente
 
 Esta es una **webapp estática sin build step**, así que los archivos `.env` (que se leen en servidor) **no son accesibles desde el navegador**. El patrón `firebase-config.local.js` + `.env.example` documenta las variables en formato familiar y deja la puerta abierta a migrar a Cloud Functions (donde `.env` SÍ funciona) sin reescribir nada.
@@ -176,43 +174,58 @@ Esta es una **webapp estática sin build step**, así que los archivos `.env` (q
 
 El archivo `.vscode/sftp.json` contiene tu nombre de usuario Windows y la ruta de una clave SSH privada. Aunque `.gitignore` ya lo excluye con `**/.vscode/**`, antes de hacer el repo público **sanea también el JSON** sustituyendo esos datos por placeholders. Detalle en `roadmap.md` → Fase 0.B.
 
-### Migración clásica (refactor de `app.js`)
+### Si rotacionas las claves en el futuro
 
-El `app.js` actual tiene el bloque `firebaseConfig` con claves reales hardcoded. Para migrar al patrón seguro:
+1. Firebase Console → *Project settings* → *Your apps* → Web app → **copia los nuevos valores** (apiKey, appId, …).
+2. Edita `firebase-config.local.js` y sustituye los valores.
+3. Recarga la página en local (`Ctrl+Shift+R`) y comprueba en la consola del navegador que Firebase inicializa sin error.
 
-1. **Copia tu config a un archivo gitignored** ejecutando:
-   ```bash
-   # copia la parte superior del firebaseConfig embebido (sin la sintaxis JS)
-   # al nuevo archivo firebase-config.local.js, sustituyendo <TU_*> por tus valores reales
-   cp firebase-config.example.js firebase-config.local.js
-   # (edita firebase-config.local.js con tus claves reales)
-   ```
-2. En `app.js`, **borra** el bloque `const firebaseConfig = { ... };` (el que tenga tu apiKey real hardcoded) y sustitúyelo por:
-   ```js
-   import { firebaseConfig } from "./firebase-config.js";
-   ```
-3. Verifica que `firebase-config.local.js` tiene exactamente las mismas claves que acabas de borrar.
-4. Lanza el servidor local (`python -m http.server 8080`) y comprueba en la consola del navegador que Firebase inicializa sin error.
-5. Commit con `git add app.js` — las claves ya no estarán en él.
-
-> 📌 Si Firebase Console sigue rechazando la inicialización tras el refactor, casi siempre es porque el proyecto tiene **App Check** activado o porque la API key tiene restricción de dominio. Revisa la consola Firebase.
+> 📌 Si Firebase Console sigue rechazando la inicialización, casi siempre es porque la API key tiene **App Check** activado o restricción de dominio/Referer. Revisa la consola Firebase.
 
 ---
 
 ## 🔐 Reglas de Realtime Database
+
+> ⚠️ **Estado actual:** las reglas endurecidas están en `database.rules.json` y el proyecto tiene el setup de `firebase-tools` listo (`firebase.json` + `.firebaserc`). Pero **NO se han desplegado todavía a Firebase** — eso requiere `firebase login` con tu cuenta de Google y es un paso interactivo que debes ejecutar tú.
 
 Las reglas actuales del proyecto son abiertas (`.read: true, .write: true`). Esto significa que **cualquier persona con la URL puede escribir**. En `database.rules.json` se incluye una propuesta endurecida:
 
 - ✅ Validación de esquema: cada item debe tener `nombre` (string no vacío, máx 80) y `comprado` (boolean).
 - ✅ `nota` opcional, string de hasta 500 caracteres.
 - ✅ Tope blando de 500 items en la colección para evitar abuso.
-- ✅ Bloqueo defensivo de claves sospechosas (`hack`, `admin`, `role`…).
+- ✅ Índice en `comprado` para queries eficientes.
 
-### Cómo aplicarlas
+### Opción A — Desplegar con `firebase-tools` (CLI, recomendado)
 
-1. Abre Firebase Console → tu proyecto → **Realtime Database** → pestaña **Rules**.
-2. Pega el contenido de `database.rules.json`.
-3. Pulsa **Publicar**.
+Una sola línea:
+
+```bash
+npx firebase-tools login && npx firebase-tools deploy --only database --project shopmate-e9195
+```
+
+Eso hace: autenticación OAuth vía navegador + validación + publicación de las reglas. Si quieres probar antes sin tocar producción:
+
+```bash
+npx firebase-tools emulators:start --only database --project shopmate-e9195
+```
+
+… y tus tests contra `localhost:9000`.
+
+### Opción B — Pegar manualmente en Firebase Console
+
+1. Abre <https://console.firebase.google.com/project/shopmate-e9195/database/rules>.
+2. **Borra** todo el contenido del editor.
+3. **Pega** el JSON de `database.rules.json` (de tu copia local).
+4. Pulsa **Publicar**.
+5. Opcionalmente prueba en la pestaña *Rules Playground* antes de publicar.
+
+### ⚠️ Antes de publicar: valida los datos existentes
+
+Las reglas estrictas pueden **rechazar updates** sobre items preexistentes cuyo esquema no coincida. Antes de Publicar:
+
+1. Ve a Firebase Console → Realtime Database → pestaña **Data**.
+2. Comprueba que cada item tiene `nombre` (string no vacío, ≤80) y `comprado` (boolean).
+3. Items actuales con `comprado` como string o número tendrán que corregirse a `true/false` antes de que nuevas escrituras funcionen.
 
 ### Próximo nivel (recomendado)
 

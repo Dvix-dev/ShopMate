@@ -26,7 +26,7 @@
 | # | Categoría | Regla | Fecha de alta |
 |---|---|---|---|
 | 00 | **Git** | Antes de un commit, si `git diff` muestra un archivo pasando de N líneas a 0, abortar el commit y preguntar a David antes de confirmar. | 2026-07-12 |
-| 01 | **Firebase / Backend** | La configuración Firebase **no vive en `app.js`**: `app.js` debe importar `firebaseConfig` desde `./firebase-config.js`. Las claves reales van **solo** a `firebase-config.local.js`, que está en `.gitignore`. Nunca commitees claves. Para endurecer RTDB modifica `database.rules.json`. | 2026-07-12 |
+| 01 | **Firebase / Backend** | La configuración Firebase **no vive en `app.js`**: `app.js` debe importar `firebaseConfig` desde `./firebase-config.js`. Las claves reales van **solo** a `firebase-config.local.js`, que está en `.gitignore`. Nunca commitees claves. Para endurecer RTDB modifica `database.rules.json`. Despliegue de reglas se hace con `npx firebase-tools deploy --only database` (requiere login OAuth del usuario). | 2026-07-12 |
 
 ---
 
