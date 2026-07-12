@@ -83,7 +83,7 @@ mv list.html index.html
 | Persistencia | Firebase Realtime Database |
 | Hosting | Servidor propio vía SFTP (`158.179.223.22`) |
 | Configuración | `firebase-config.local.js` gitignored + `.env.example` |
-| Autenticación | No implementada (uso compartido sin login) |
+| Autenticación | Firebase Authentication magic-link (planeada Fase 1.A, actualmente sin login) |
 
 > No se usa ningún framework, bundler ni gestor de paquetes. Todo se ejecuta directamente en el navegador.
 

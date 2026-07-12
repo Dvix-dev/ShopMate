@@ -27,6 +27,7 @@
 |---|---|---|---|
 | 00 | **Git** | Antes de un commit, si `git diff` muestra un archivo pasando de N líneas a 0, abortar el commit y preguntar a David antes de confirmar. | 2026-07-12 |
 | 01 | **Firebase / Backend** | La configuración Firebase **no vive en `app.js`**: `app.js` debe importar `firebaseConfig` desde `./firebase-config.js`. Las claves reales van **solo** a `firebase-config.local.js`, que está en `.gitignore`. Nunca commitees claves. Para endurecer RTDB modifica `database.rules.json`. Despliegue de reglas se hace con `npx firebase-tools deploy --only database` (requiere login OAuth del usuario). | 2026-07-12 |
+| 02 | **Native wrapper** | **Capacitor** está **permitido exclusivamente** como wrapper de la app Android/iOS. Instalar `@capacitor/core`, `@capacitor/cli`, `@capacitor/android` y plugins solo si la tarea requiere comportamiento nativo real (push, splash, biometric, deep links, Play Store). Esto introduce build step **solo en el subdir `android/`** generado por `npx cap init`. El código web (`index.html`, `app.js`, `main.css`, `firebase-config*`) permanece en HTML+CSS+JS puro sin build step y **NO** debe usar Capacitor ni sus APIs. Antes de proponer Capacitor, confirmar con David. | 2026-07-12 |
 
 ---
 
@@ -45,15 +46,17 @@
 > Estas son **límites duros**. Ante la duda, la IA pregunta antes de actuar.
 
 1. ❌ **No introducir frameworks** (React, Vue, Svelte, jQuery, etc.) sin que David lo pida.
-2. ❌ **No añadir un build step** (Webpack, Vite, Rollup, npm) sin acuerdo.
-3. ❌ **No añadir dependencias** (`package.json`, `node_modules`) salvo que David lo solicite.
+2. ❌ **No añadir un build step al código web** (Webpack, Vite, Rollup, npm) sin acuerdo. *Sí está permitido el build step en `android/` cuando uses Capacitor.*
+3. ❌ **No añadir dependencias web** (`package.json`, `node_modules` en la raíz para webpack/vite/etc.) salvo que David lo solicite. *Las dependencias de Capacitor viven **solo** dentro del subdir `android/`.*
 4. ❌ **No tocar `.vscode/sftp.json`** ni credenciales de despliegue.
 5. ❌ **No commitear claves reales** de Firebase. Solo se commitean `firebase-config.example.js` (placeholders) y `firebase-config.js` (loader). Las claves reales van en `firebase-config.local.js`, que está gitignored.
 6. ❌ **No relajar las RTDB rules** propuestas en `database.rules.json` — al contrario, proponer endurecerlas si David lo pide.
-7. ❌ **No renombrar archivos** del proyecto sin confirmar.
+7. ❌ **No renombrar archivos** del proyecto sin confirmar. *Especialmente `index.html`, `app.js`, `main.css` — son referenciados por el wrapper Capacitor y romperían el APK.*
 8. ❌ **No borrar commits del historial git** (no usar `reset --hard` ni `rebase` destructivo).
 9. ❌ **No subir al servidor de producción** sin que David confirme.
 10. ❌ **No exponer** rutas personales (`c:\Users\David\…`, claves SSH, IPs internas, tokens) en archivos versionados. Antes de hacer el repo público, **sustituir** cualquier dato sensible de `.vscode/sftp.json` u otros configs por placeholders.
+11. ❌ **No exponer el esquema de datos legacy `/items/` directo** a usuarios autenticados en Fase 1+: el listado debe moverse a `/families/{familyId}/items/`. Para migración: usar un script de copia atómica (leer todo, escribir nuevo, borrar viejo) antes de endurecer las rules. Cuando se haga, **avisar antes** porque afecta a todos los usuarios activos.
+12. ❌ **No usar `@capacitor/*` APIs en `app.js`** ni en ningún archivo del directorio raíz. Si una tarea requiere APIs nativas, aislar esa parte en el subdir `android/` o en un plugin nativo dedicado que se comunique por mensajes (`@capacitor/core` Messages API).
 
 ---
 
@@ -71,6 +74,7 @@ Estas prácticas se consideran **autorizadas** sin necesidad de pedir permiso ca
    - `#item-input` es el input de texto.
    - `#add-btn` añade.
    - `#validar-btn` borra los marcados.
+   - En Fase 1+ se añadirán nuevos selectores para auth, profile y families; **mantener los anteriores** sin renombrarlos para no romper compat.
 7. ✅ Antes de implementar cambios grandes, **proponer un plan con `write_todos`** y mostrarlo a David.
 8. ✅ Antes de implementar, **dar un aviso claro** si un cambio puede romper la sincronización en tiempo real.
 9. ✅ Al restaurar archivos con `git checkout`, **avisar primero** de que el guardado activará `uploadOnSave` (SFTP).
@@ -92,6 +96,7 @@ Cuando David diga algo como:
 - Estilo visual / UI
 - Firebase / Backend
 - Git / Despliegue
+- Native wrapper (Capacitor)
 - Comunicación con el usuario
 - Pruebas
 - Documentación
@@ -108,4 +113,6 @@ Cuando David diga algo como:
 
 > Histórico. No se borran, se mueven aquí para memoria. Indicar fecha y motivo de retirada.
 
-*(vacío todavía — la IA nunca ha retirado una regla)*
+### #11 (2026-07-12)
+
+> **Regla retirada:** "No introducir Capacitor en el código web". **Motivo:** consolidada en regla activa #02, que cubre el mismo principio con más detalle y matiz (build step solo en `android/`, no en raíz web). Borrada para evitar duplicación y confusión.

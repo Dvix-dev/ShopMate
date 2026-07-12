@@ -46,8 +46,8 @@ ShopMate/
 
 - **Frontend**: HTML5 + CSS3 + JavaScript (ES Modules, sin transpilar).
 - **Persistencia**: Firebase Realtime Database — proyecto `shopmate-e9195`.
-- **Auth**: Ninguna (uso compartido abierto).
-- **Build**: Ninguno. No hay `package.json`, `node_modules`, ni bundlers.
+- **Auth**: Ninguna activa (uso compartido abierto). **Planeada** Fase 1.A: Firebase Authentication con email magic link (sin contraseñas). Ver `roadmap.md` → 1.A.
+- **Build**: Ninguno en el código web (no hay `package.json` raíz, ni `node_modules` para bundlers). **Excepción planeada Fase 2.C:** subdir `android/` con Capacitor introduce build step aislado para empaquetar la webapp como APK instalable. Ver `roadmap.md` → 2.C.
 - **Fuentes**: Google Fonts — `Poppins` (body) y `Caveat` (lista).
 - **Despliegue**: extensión VS Code SFTP (.vscode/sftp.json), auto-upload al guardar.
 
