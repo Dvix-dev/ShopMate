@@ -150,30 +150,29 @@ Restauración recomendada: `git checkout 4f15c99 -- app.js main.css list.html`.
 
 1. 🟢 El proyecto **no usa build step** — no proponer webpack, vite, etc. sin pedirlo.
 2. 🟢 El proyecto **no usa frameworks** — no asumir React/Vue.
-3. 🟢 Los archivos locales están **vacíos**; el código real vive en git (commit `4f15c99`).
-4. 🟢 La configuración Firebase **está embebida en `app.js`** — revisar antes de subir a repos públicos.
+3. 🟢 Los archivos locales están **vacíos** en HEAD pero **el código real vive en git** (commit `4f15c99`; restaurado a `index.html`/`app.js`/`main.css` reales tras `d4ecc06` gracias a los commits de la Fase 0).
+4. 🟢 La configuración Firebase está **externalizada**: `app.js` importa `firebaseConfig` desde `./firebase-config.js` (loader) que prioriza `firebase-config.local.js` (gitignored). Las claves reales NO viajan en el repo.
 5. 🟢 Existe una **integración SFTP** que sube al guardar — no incluir secretos en los archivos.
-6. 🟢 Las reglas RTDB son **abiertas** — proponer endurecerlas al añadir auth.
+6. 🟢 Las reglas RTDB están **endurecidas en `database.rules.json`** (pendiente de `firebase deploy` por David). Tienen validación de esquema (nombre, comprado) y tope de 500 items.
 7. 🟢 La IA debe leer además `instrucciones_ai.md` (reglas explícitas) y `roadmap.md` (plan futuro).
+8. 🟢 **Console logs**: `app.js` usa helper `log/warn/logerr` con prefijo de módulo. Para silenciarlos en local: `localStorage.setItem('shopmate:debug','0')`. Definido por regla activa #04.
+9. 🟢 **Aislamiento dev/prod**: ver `dev-isolation.txt` para no contaminar la lista familiar cuando se prueba en local.
 
 ---
 
 ## 11. Snippet de referencia (Firebase init)
 
-> ⚠️ Snapshots válidos **solo en commit `4f15c99`**. Si el código cambia, deja de ser exacto. Para código vivo leer `app.js` o `git show 4f15c99:app.js`.
+> ⚠️ Snapshots válidos **solo desde commit `2add016` en adelante**. Para código vivo leer `app.js` o `git show 2add016:app.js`. (El patrón hardcoded que había en `4f15c99` ya no se usa; ahora la config se externaliza.)
 
-Cómo se inicializa Firebase y se escucha la lista:
+Cómo se inicializa Firebase y se escucha la lista (patrón actual):
 
 ```js
 import { initializeApp }                 from "firebase/app";
 import { getDatabase, ref, push, update,
          remove, onValue }               from "firebase/database";
 
-const firebaseConfig = {
-  projectId: "shopmate-e9195",
-  databaseURL: "https://shopmate-e9195-default-rtdb.firebaseio.com",
-  // ... resto de claves (apiKey, appId, measurementId, …)
-};
+// Config externalizada (loader + .local.js gitignored)
+import { firebaseConfig } from "./firebase-config.js";
 
 const app  = initializeApp(firebaseConfig);
 const db   = getDatabase(app);
@@ -181,6 +180,8 @@ const list = ref(db, 'items');
 
 onValue(list, renderLista);
 ```
+
+> 🔍 **Por qué ya no hay `const firebaseConfig = {...}` inline**: lo nuevo es el loader `firebase-config.js` que prefiere `firebase-config.local.js` (gitignored) y cae al `firebase-config.example.js` (placeholders). Nunca se commitean claves reales. Ver `README.md → Configuración de Firebase y seguridad`.
 
 ---
 

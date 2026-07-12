@@ -68,6 +68,9 @@ mv list.html index.html
 - 🎨 **Diseño responsivo** con tipografías modernas (Poppins + Caveat).
 - 🌐 **Despliegue por SFTP** automático al guardar (VS Code).
 - 🔒 **Configuración externalizada**: las claves de Firebase NO viajan en el repo.
+- 🐞 **Debug opcional**: `localStorage.setItem('shopmate:debug','0')` silencia los `console.log` de `app.js` (útil en producción).
+- 📝 **Notas en items**: añade `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa" (popup al pulsar el icono 📝).
+- 🧪 **Aislamiento dev/prod**: ver `dev-isolation.txt` para 3 caminos (emulador / proyecto Firebase paralelo / staging SFTP).
 
 > 📝 **Nota:** el proyecto aún **no es PWA completa** (sin `manifest.json` ni service worker); ese trabajo está planificado en `roadmap.md` → Fase 2. La versión inicial (`087a2fd`) sí guardaba en `localStorage` como fallback, pero la build Firebase actual no conserva esa capa offline.
 
@@ -130,6 +133,7 @@ ShopMate/
 ├── roadmap.md                # Hoja de ruta de mejoras futuras
 ├── .gitignore                # Excluye claves reales (.env, firebase-config.local.js, etc.)
 ├── .env.example              # Plantilla-documento de variables (no usada por el browser)
+├── dev-isolation.txt         # 3 caminos para aislar entorno dev del familiar de producción
 ├── firebase-config.example.js  # Plantilla con placeholders (commiteada, Segura)
 ├── firebase-config.js        # Loader que prefiere .local.js y cae al .example.js
 ├── firebase-config.local.js  # ⚠️ NO COMMITEAR · Contiene tus claves reales (gitignored)
