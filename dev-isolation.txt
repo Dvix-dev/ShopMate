@@ -1,0 +1,101 @@
+=============================================================
+ ShopMate · guia rapida de aislamiento DEV vs PRODUCCION
+=============================================================
+ OBJETIVO: que lo que toques en pruebas/desarrollo no afecte
+ a la base de datos real que usa tu familia.
+
+-------------------------------------------------------------
+ 1. EMULADOR LOCAL (recomendado, lo mas rapido)
+-------------------------------------------------------------
+   a) Asegurate de tener Node (ya lo tienes: v22.14.0).
+   b) Levanta el emulador de RTDB:
+        npx firebase-tools emulators:start --only database \
+            --project shopmate-e9195 \
+            --import=./emulator-data --export-on-exit
+      Se queda escuchando en http://localhost:9000
+      UI web para inspeccionar: http://localhost:4000
+
+   c) Para que la app use el emulador en vez de la nube,
+      anade esto al FINAL de app.js (antes de los eventos UI):
+        if (window.location.search.includes('env=emul')) {
+          const { connectDatabaseEmulator } = await import(
+            "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js"
+          );
+          connectDatabaseEmulator(db, 'localhost', 9000);
+          console.log('[firebase] usando EMULADOR local');
+        }
+
+   d) Sirve la app en local y abrela con el flag:
+        python -m http.server 8080
+        http://localhost:8080/?env=emul
+      Sin ese flag, conecta a la nube (produccion familiar).
+
+   Pros: gratis, instantaneo, datos aislados.
+   Contras: requiere linea de codigo en app.js (solo este archivo).
+
+-------------------------------------------------------------
+ 2. PROYECTO FIREBASE PARALELO (cuando necesites nube real)
+-------------------------------------------------------------
+   a) Entra a https://console.firebase.google.com y crea un
+      proyecto NUEVO llamado: shopmate-dev-e9195
+
+   b) Dentro del proyecto dev, haz lo mismo que en produccion:
+      - Realtime Database > Create database > Start in test mode
+      - Authentication > Sign-in method > habilita Email link
+      - Project settings > Your apps > Web app > copia config
+
+   c) Crea en este repo un archivo NUEVO:
+        cp firebase-config.example.js firebase-config.dev.local.js
+      Pegale los valores del proyecto dev (no del prod).
+
+   d) Para apuntar a dev desde la app:
+        if (window.location.search.includes('env=dev')) {
+          const { firebaseConfig: devCfg } = await import(
+            './firebase-config.dev.local.js'
+          );
+          const appDev = initializeApp(devCfg, 'dev');
+          const dbDev  = getDatabase(appDev);
+        }
+
+   Pros: datos en la nube pero sin tocar la familia.
+   Contras: configurar proyecto Firebase nuevo + duplicar reglas.
+
+-------------------------------------------------------------
+ 3. STAGING EN SERVIDOR (cuando quieras probar SIN afectar
+    al WebView de produccion desplegado)
+-------------------------------------------------------------
+   a) Edita .vscode/sftp.json y anade un segundo "profile":
+        {
+          "name": "Dvix Server (STAGING)",
+          "host": "158.179.223.22",
+          "protocol": "sftp",
+          "port": 22,
+          "username": "ubuntu",
+          "privateKeyPath": "...",
+          "remotePath": "/var/www/html/shopmate-staging",
+          "uploadOnSave": true,
+          "ignore": [...]
+        }
+
+   b) Despliega con uploadOnSave a la carpeta staging
+      (/var/www/html/shopmate-staging), no a la de produccion.
+
+   c) Abre en navegador http://158.179.223.22/shopmate-staging/
+      o el dominio que uses.
+
+   Pros: prueba la pipeline real de SFTP sin ensuciar prod.
+   Contras: usa el mismo Firebase prod si no combinas con (2).
+
+-------------------------------------------------------------
+ RECOMENDACION POR CASO
+-------------------------------------------------------------
+   Cambios visuales / UI pequenos       -> opcion 1 (emulador)
+   Pruebas de sync / RTDB logic          -> opcion 1 o 2 (dev)
+   Pruebas de flujo completo (Auth, etc) -> opcion 2 (dev)
+   Test del APK / WebView final          -> opcion 3 (staging)
+
+   En produccion, tu familia SIEMPRE usa la nube ORIGINAL
+   (shopmate-e9195) y por defecto la app conecta alli.
+   Cualquier ruta con ?env=... es solo para ti.
+
+=============================================================
