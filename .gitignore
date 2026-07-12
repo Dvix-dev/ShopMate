@@ -1,0 +1,58 @@
+# ──────────────────────────────────────────────
+#  ShopMate — .gitignore
+#  Generado para evitar commitear credenciales
+#  reales de Firebase, claves SSH o rutas
+#  personales por accidente.
+# ──────────────────────────────────────────────
+
+# ── Configuración local de Firebase (con claves reales) ──
+firebase-config.local.js
+
+# ── Variables de entorno ──
+.env
+.env.*
+!.env.example
+
+# ── Claves privadas / credenciales ──
+*.pem
+*.key
+*.pfx
+*.crt
+*.cer
+*.p12
+secrets/
+credentials/
+
+# ── SFTP / despliegue (contiene rutas de clave SSH privadas y hostnames) ──
+.vscode/sftp.json
+.vscode/settings.json
+
+# ── Dependencias (por si en el futuro se añade algo) ──
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ── Archivos del sistema operativo ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor / IDE ──
+.idea/
+.vscode/launch.json
+.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# ── Logs ──
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# ── Build / dist (preparado por si en futuro se añade) ──
+dist/
+build/
+out/
+.cache/

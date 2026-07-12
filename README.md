@@ -12,12 +12,13 @@
 4. [Stack tecnológico](#-stack-tecnológico)
 5. [Instalación y arranque local](#-instalación-y-arranque-local)
 6. [Estructura del proyecto](#-estructura-del-proyecto)
-7. [Configuración de Firebase](#-configuración-de-firebase)
-8. [Despliegue en producción](#-despliegue-en-producción)
-9. [Uso de la aplicación](#-uso-de-la-aplicación)
-10. [Modelo de datos](#-modelo-de-datos)
-11. [Personalización visual](#-personalización-visual)
-12. [Solución de problemas](#-solución-de-problemas)
+7. [Configuración de Firebase y seguridad](#-configuración-de-firebase-y-seguridad)
+8. [Reglas de Realtime Database](#-reglas-de-realtime-database)
+9. [Despliegue en producción](#-despliegue-en-producción)
+10. [Uso de la aplicación](#-uso-de-la-aplicación)
+11. [Modelo de datos](#-modelo-de-datos)
+12. [Personalización visual](#-personalización-visual)
+13. [Solución de problemas](#-solución-de-problemas)
 
 ---
 
@@ -31,7 +32,7 @@ Toda la información se sincroniza a través de **Firebase Realtime Database**, 
 
 ## ⚠️ Estado actual del proyecto
 
-> **Importante:** los archivos `app.js`, `index.html`, `main.css` y los recursos de `assets/` actualmente se encuentran **vacíos (0 bytes)** en el directorio de trabajo. Esto fue provocado por un commit de "limpieza" (`d4ecc06`) que sobrescribió los archivos con contenido vacío.
+> **Importante:** los archivos `app.js`, `index.html`, `main.css` y los recursos de `assets/` actualmente se encuentran **vacíos (0 bytes)** en el directorio de trabajo por un commit de "limpieza" (`d4ecc06`) que sobrescribió los archivos con contenido vacío.
 >
 > La versión funcional del proyecto está disponible en los commits previos:
 >
@@ -66,6 +67,7 @@ mv list.html index.html
 - 📡 **Sincronización en tiempo real** entre todos los dispositivos conectados.
 - 🎨 **Diseño responsivo** con tipografías modernas (Poppins + Caveat).
 - 🌐 **Despliegue por SFTP** automático al guardar (VS Code).
+- 🔒 **Configuración externalizada**: las claves de Firebase NO viajan en el repo.
 
 > 📝 **Nota:** el proyecto aún **no es PWA completa** (sin `manifest.json` ni service worker); ese trabajo está planificado en `roadmap.md` → Fase 2. La versión inicial (`087a2fd`) sí guardaba en `localStorage` como fallback, pero la build Firebase actual no conserva esa capa offline.
 
@@ -80,6 +82,7 @@ mv list.html index.html
 | Lógica | JavaScript ES Modules |
 | Persistencia | Firebase Realtime Database |
 | Hosting | Servidor propio vía SFTP (`158.179.223.22`) |
+| Configuración | `firebase-config.local.js` gitignored + `.env.example` |
 | Autenticación | No implementada (uso compartido sin login) |
 
 > No se usa ningún framework, bundler ni gestor de paquetes. Todo se ejecuta directamente en el navegador.
@@ -121,57 +124,99 @@ php -S localhost:8080
 
 ```
 ShopMate/
-├── README.md              # Esta guía
-├── contexto.md            # Resumen ejecutivo (para la IA)
-├── instrucciones_ai.md    # Reglas que debe seguir la IA
-├── roadmap.md             # Hoja de ruta de mejoras futuras
-├── index.html             # Página principal (renombrada desde list.html)
-├── app.js                 # Lógica + integración Firebase
-├── main.css               # Estilos
+├── README.md                 # Esta guía
+├── contexto.md               # Resumen ejecutivo (para la IA)
+├── instrucciones_ai.md       # Reglas que debe seguir la IA
+├── roadmap.md                # Hoja de ruta de mejoras futuras
+├── .gitignore                # Excluye claves reales (.env, firebase-config.local.js, etc.)
+├── .env.example              # Plantilla-documento de variables (no usada por el browser)
+├── firebase-config.example.js  # Plantilla con placeholders (commiteada, Segura)
+├── firebase-config.js        # Loader que prefiere .local.js y cae al .example.js
+├── firebase-config.local.js  # ⚠️ NO COMMITEAR · Contiene tus claves reales (gitignored)
+├── database.rules.json       # Reglas RTDB endurecidas para aplicar en Firebase Console
+├── index.html                # Página principal (renombrada desde list.html)
+├── app.js                    # Lógica + integración Firebase (importa config del loader)
+├── main.css                  # Estilos
 └── assets/
-    ├── icon.ico           # Favicon  ⚠️ está vacío (0 bytes) en el repo
-    └── logo.png           # Logo de cabecera  ⚠️ está vacío (0 bytes) en el repo
+    ├── icon.ico              # Favicon  ⚠️ vacío en repo
+    └── logo.png              # Logo de cabecera  ⚠️ vacío en repo
 ```
 
 ---
 
-## 🔥 Configuración de Firebase
+## 🔥 Configuración de Firebase y seguridad
 
-> ⚠️ **Crítico — seguridad:** la configuración Firebase está actualmente **embebida en `app.js`**. Si el repo pasa a ser público, **mueve las claves a un archivo ignorado** (`firebase-config.local.js` + `.gitignore`) antes del primer push. Más detalles en `roadmap.md` → Fase 0.
+> ⚠️ **Estado actual:** el `app.js` que vino del SFTP contiene las claves reales **hardcoded**. Este commit añade el scaffolding seguro pero **no toca `app.js`**. Refactoriza manualmente `app.js` siguiendo la receta "Migración clásica" más abajo.
 
-> ⚠️ **Privacidad del repositorio:** el archivo `.vscode/sftp.json` contiene tu nombre de usuario Windows (`c:\Users\David\Downloads\...`) y la ruta de una clave SSH privada. Aunque `.gitignore` actual excluye `**/.vscode/**`, antes de hacer el repo público **sanea** el archivo sustituyendo esos datos por placeholders. Detalle en `roadmap.md` → Fase 0.B.
+### Patrón seguro (recomendado)
 
-El proyecto se conecta al proyecto Firebase **`shopmate-e9195`**. La configuración vive en `app.js`:
+1. **Crea tu configuración local** (gitignored):
+   ```bash
+   cp firebase-config.example.js firebase-config.local.js
+   ```
+2. **Edita `firebase-config.local.js`** y sustituye los placeholders (`<TU_API_KEY>`, etc.) por los valores reales de tu consola Firebase:
+   - <https://console.firebase.google.com/project/shopmate-e9195/settings/general>
+3. **`app.js` importa la config** desde `./firebase-config.js`, que es un loader transparente — prioriza `firebase-config.local.js` y, si no existe, cae al example (que tiene placeholders, fallaría en runtime pero no expone secretos).
+4. **Nunca commitees** `firebase-config.local.js` — está en `.gitignore`.
 
-```js
-const firebaseConfig = {
-  apiKey: "<API_KEY>",
-  authDomain: "shopmate-e9195.firebaseapp.com",
-  databaseURL: "https://shopmate-e9195-default-rtdb.firebaseio.com",
-  projectId: "shopmate-e9195",
-  storageBucket: "shopmate-e9195.appspot.com",
-  messagingSenderId: "<SENDER_ID>",
-  appId: "<APP_ID>",
-  measurementId: "<MEASUREMENT_ID>"
-};
+### Flujo de carga
+
+```
+app.js
+  └─ import { firebaseConfig } from "./firebase-config.js"
+       ├─ si existe firebase-config.local.js → lo usa (claves reales)
+       └─ si no, fallback a firebase-config.example.js (placeholders)
 ```
 
-> ⚠️ **Nunca** subas las claves reales al repositorio público. Usa variables de entorno o un archivo `firebase-config.js` ignorado por `.gitignore`.
+### Por qué NO `.env` directamente
 
-### Reglas de seguridad mínimas (RTDB)
+Esta es una **webapp estática sin build step**, así que los archivos `.env` (que se leen en servidor) **no son accesibles desde el navegador**. El patrón `firebase-config.local.js` + `.env.example` documenta las variables en formato familiar y deja la puerta abierta a migrar a Cloud Functions (donde `.env` SÍ funciona) sin reescribir nada.
 
-```json
-{
-  "rules": {
-    "items": {
-      ".read":  true,
-      ".write": true
-    }
-  }
-}
-```
+### Privacidad del repositorio
 
-> Estas reglas son **abiertas**: cualquier persona con la URL puede escribir. Se deben endurecer antes de exponer el proyecto (ver `roadmap.md`).
+El archivo `.vscode/sftp.json` contiene tu nombre de usuario Windows y la ruta de una clave SSH privada. Aunque `.gitignore` ya lo excluye con `**/.vscode/**`, antes de hacer el repo público **sanea también el JSON** sustituyendo esos datos por placeholders. Detalle en `roadmap.md` → Fase 0.B.
+
+### Migración clásica (refactor de `app.js`)
+
+El `app.js` actual tiene el bloque `firebaseConfig` con claves reales hardcoded. Para migrar al patrón seguro:
+
+1. **Copia tu config a un archivo gitignored** ejecutando:
+   ```bash
+   # copia la parte superior del firebaseConfig embebido (sin la sintaxis JS)
+   # al nuevo archivo firebase-config.local.js, sustituyendo <TU_*> por tus valores reales
+   cp firebase-config.example.js firebase-config.local.js
+   # (edita firebase-config.local.js con tus claves reales)
+   ```
+2. En `app.js`, **borra** el bloque `const firebaseConfig = { ... };` (el que tenga tu apiKey real hardcoded) y sustitúyelo por:
+   ```js
+   import { firebaseConfig } from "./firebase-config.js";
+   ```
+3. Verifica que `firebase-config.local.js` tiene exactamente las mismas claves que acabas de borrar.
+4. Lanza el servidor local (`python -m http.server 8080`) y comprueba en la consola del navegador que Firebase inicializa sin error.
+5. Commit con `git add app.js` — las claves ya no estarán en él.
+
+> 📌 Si Firebase Console sigue rechazando la inicialización tras el refactor, casi siempre es porque el proyecto tiene **App Check** activado o porque la API key tiene restricción de dominio. Revisa la consola Firebase.
+
+---
+
+## 🔐 Reglas de Realtime Database
+
+Las reglas actuales del proyecto son abiertas (`.read: true, .write: true`). Esto significa que **cualquier persona con la URL puede escribir**. En `database.rules.json` se incluye una propuesta endurecida:
+
+- ✅ Validación de esquema: cada item debe tener `nombre` (string no vacío, máx 80) y `comprado` (boolean).
+- ✅ `nota` opcional, string de hasta 500 caracteres.
+- ✅ Tope blando de 500 items en la colección para evitar abuso.
+- ✅ Bloqueo defensivo de claves sospechosas (`hack`, `admin`, `role`…).
+
+### Cómo aplicarlas
+
+1. Abre Firebase Console → tu proyecto → **Realtime Database** → pestaña **Rules**.
+2. Pega el contenido de `database.rules.json`.
+3. Pulsa **Publicar**.
+
+### Próximo nivel (recomendado)
+
+Ver `roadmap.md` → Fase 1: migrar a **Firebase Authentication** con magic link por email y exigir `auth != null` en `.write`. Mientras no haya auth, las reglas aquí propuestas son una mejora razonable sobre el open-access actual.
 
 ---
 
@@ -186,7 +231,7 @@ El despliegue está automatizado mediante la extensión **SFTP** de VS Code usan
   "protocol": "sftp",
   "port": 22,
   "username": "ubuntu",
-  "privateKeyPath": "c:\\Users\\David\\Downloads\\ssh-key-2024-06-11.key",
+  "privateKeyPath": "c:\\\\Users\\\\David\\\\Downloads\\\\ssh-key-2024-06-11.key",
   "remotePath": "/var/www/html/shopmate",
   "uploadOnSave": true,
   "ignore": [
@@ -209,6 +254,7 @@ El despliegue está automatizado mediante la extensión **SFTP** de VS Code usan
 3. En el apartado **Lista de Compra Conjunta**:
    - Escribe el nombre del producto en el campo de texto.
    - Pulsa **Añadir** o la tecla `Enter` para añadirlo.
+   - Soporta notas opcionales: `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa".
 4. Cada producto aparece con un checkbox grande · pulsa para marcarlo como comprado.
 5. Cuando termines la compra, pulsa **Validar compra ✔** para borrar los productos ya comprados.
 6. Cualquier persona con la URL verá los cambios al instante.
@@ -237,8 +283,9 @@ Colección Firebase RTDB: **`items`**
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `_key_` (id) | string | ID autogenerado por `push()` |
-| `nombre` | string | Nombre del producto |
+| `nombre` | string | Nombre del producto, máx 80 chars |
 | `comprado` | boolean | Estado: pendiente (`false`) o comprado (`true`) |
+| `nota` (opcional) | string | Nota libre hasta 500 chars |
 
 ---
 
@@ -262,8 +309,9 @@ Colección Firebase RTDB: **`items`**
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | Pantalla en blanco | `index.html` vacío (estado actual) | Restaurar con `git checkout 4f15c99 -- <archivo>` |
+| `Firebase: No Firebase App '[DEFAULT]' has been created` | `firebase-config.local.js` falta o tiene placeholders | Crear `firebase-config.local.js` desde `firebase-config.example.js` con claves reales |
 | Firebase: error de CORS | Servidor local abierto con `file://` | Usar `python -m http.server` |
-| Datos no se sincronizan | Reglas RTDB mal configuradas | Revisar la pestaña *Rules* en Firebase Console |
+| Datos no se sincronizan | Reglas RTDB recién endurecidas pueden rechazar items mal formados | Revisar *Rules* en Firebase Console y los logs del navegador |
 | 403 al subir vía SFTP | Clave SSH caducada | Renovar clave y actualizar `privateKeyPath` |
 | Estilos CSS no cargan | Ruta incorrecta a `main.css` | Verificar `<link>` en `index.html` |
 

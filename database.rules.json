@@ -1,0 +1,26 @@
+{
+  "rules": {
+    "items": {
+      ".read": true,
+      ".indexOn": ["comprado"],
+
+      "$itemId": {
+        ".validate": "newData.hasChildren(['nombre', 'comprado'])",
+
+        "nombre": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+        },
+
+        "comprado": {
+          ".validate": "newData.isBoolean()"
+        },
+
+        "nota": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500)"
+        }
+      },
+
+      ".write": "newData.numChildren() <= 500"
+    }
+  }
+}
