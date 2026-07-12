@@ -12,9 +12,6 @@
 //
 //    3. `firebase-config.local.js` está en `.gitignore` y NUNCA se sube
 //       al repositorio. Es tu configuración segura.
-//
-//  ⚠️  IMPORTANTE: este archivo SÍ se commitea (es solo plantilla),
-//      `firebase-config.local.js` NO se commitea (gitignored).
 // ────────────────────────────────────────────────────────────────────────────
 
 export const firebaseConfig = {
