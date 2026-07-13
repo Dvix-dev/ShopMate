@@ -72,7 +72,7 @@ mv list.html index.html
 - 🐞 **Debug opcional**: `localStorage.setItem('shopmate:debug','0')` silencia los `console.log` de `app.js` (útil en producción).
 - 📝 **Notas en items**: añade `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa" (popup al pulsar el icono 📝).
 - 🧪 **Aislamiento dev/prod**: `dev-isolation.txt` documenta el uso del emulador local (RTDB + Auth + UI) sin tocar la nube prod. Único camino soportado actualmente (los métodos "proyecto paralelo" y "staging SFTP" fueron retirados en commit `ff37025`).
-- 🍔 **Menú hamburguesa (Fase 2.A)**: drawer lateral con 4 secciones — Perfil (read-only), Ajustes (placeholder §1.C/§1.D), **Historial de compras** (acordeón con cada compra agrupada), y Cerrar sesión. Se abre con el botón ☰ de la cabecera; cierra con backdrop, Escape, botón ✕ dentro del drawer o click-fuera. Header del drawer **sticky** (permanece visible al scrollear) y ancho **82vw en mobile** (<480px). Foco gestionado para accesibilidad (a11y: foco al close button al abrir, devuelto al ☰ al cerrar, focus trap Tab/Shift+Tab).
+- 🍔 **Menú hamburguesa (Fase 2.A)**: drawer lateral con 4 secciones — Perfil (read-only), Ajustes (placeholder §1.C/§1.E), **Historial de compras** (acordeón con cada compra agrupada), y Cerrar sesión. Se abre con el botón ☰ de la cabecera; cierra con backdrop, Escape, botón ✕ dentro del drawer o click-fuera. Header del drawer **sticky** (permanece visible al scrollear) y ancho **82vw en mobile** (<480px). Foco gestionado para accesibilidad (a11y: foco al close button al abrir, devuelto al ☰ al cerrar, focus trap Tab/Shift+Tab).
 - 📜 **Historial de compras (Fase 2.A, modo compat)**: cada "Validar compra" archiva los items marcados a `/shared/compras/{pushId}/{fecha, items}` y los borra de `/items/`. Las compras se ven agrupadas en acordeón (collapsed por defecto). Cap auto-trim a 20 compras (las más antiguas se borran). Cuando llegue §1.D Familias, los datos se migrarán a `/families/{fid}/compras/` con script atómico.
 
 > 📝 **Nota:** el proyecto aún **no es PWA completa** (sin `manifest.json` ni service worker); ese trabajo está planificado en `roadmap.md` → Fase 2. La versión inicial (`087a2fd`) sí guardaba en `localStorage` como fallback, pero la build Firebase actual no conserva esa capa offline.
@@ -246,7 +246,7 @@ Las reglas estrictas pueden **rechazar updates** sobre items preexistentes cuyo 
 
 **Fase 1.A cerrada** el 2026-07-13 (commits `f7e327f`, `d5cec7d`, `6c488d3`, `ff37025`, `193aaa6`, `3cbebb7`, `4211d5b`). Reglas desplegadas, E2E validado.
 
-Siguiente hito lógico: §1.D **Familias** — migración profunda de `/items/` a `/families/{familyId}/items/` con script de copia atómica (regla IA #11). Decisión clave de modelo de datos antes de codear (ownership, invitations, multi-membership). Ver `roadmap.md` §1.D y arrancar conversación con la IA.
+Siguiente hito lógico: §1.D **Control de items** (editar/borrar) → §1.E **Familias** — migración profunda de `/items/` a `/families/{familyId}/items/` con script de copia atómica (regla IA #11). Decisión clave de modelo de datos antes de codear (ownership, invitations, multi-membership). Ver `roadmap.md` §1.D y arrancar conversación con la IA.
 
 ---
 

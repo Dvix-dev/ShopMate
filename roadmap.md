@@ -84,7 +84,26 @@
   - Atajos de teclado opcionales.
 - [ ] **Sheet de Ajustes** accesible desde la cabecera (modal o drawer).
 
-### 1.D — Familias (listas compartidas entre varias personas)
+### 1.D — Control de items (editar / borrar) [PRIORIDAD 2026-07-13]
+
+> Ahora que "Validar compra" archiva los items en `/shared/compras/`
+> (Fase 2.A), los users necesitan poder corregir errores SIN ensuciar
+> el historial. Hoy la unica forma de quitar un item es validando la
+> compra, lo cual crea una compra "fantasma" en el historial. Esta
+> seccion anade CRUD basico sobre items ANTES de §1.E Familias.
+
+- [ ] **Editar item**: click en el nombre (o doble-click desktop) → input editable inline. Guardar con Enter o blur. Cancelar con Escape (restaura el valor anterior).
+- [ ] **Borrar item**: icono 🗑️ al lado de cada item. Visible en hover desktop / siempre visible en mobile (target tactil). Confirmacion con dialog nativo (`confirm()`) o undo toast (preferible: toast con "Deshacer" por 5s).
+- [ ] **Restricciones de edicion**:
+  - Nombre: 1..80 chars (mismo cap que `database.rules.json`).
+  - Si el item esta `comprado: true`, se puede editar el nombre sin desmarcarlo.
+  - Si se edita la nota, el popup de notas sigue funcionando.
+- [ ] **RTDB rules**: ya validan `nombre` 1..80 chars en `/items/`. No hace falta cambiar rules.json (la validacion server-side ya cubre la edicion).
+- [ ] **Undo despues de borrar**: toast "Item borrado [Deshacer]" por 5s. El undo reactiva el item via `set()` con la data original (nombre, nota, comprado, addedBy si existe).
+- [ ] **Accesibilidad**: botones con `aria-label`, edit inline navegable con teclado (Tab/Shift+Tab/Enter/Escape), focus visible.
+- [ ] **Mobile**: iconos suficientemente grandes (min 44px target tactil Apple HIG), swipe-to-delete opcional como mejora futura.
+
+### 1.E — Familias (listas compartidas entre varias personas)
 
 - [ ] **Esquema `/families/{familyId}`**:
   ```
@@ -250,7 +269,7 @@
 | Hito | Alcance | Estado |
 |---|---|---|
 | **M0 — Rescate + seguridad** | Restaurar + `.gitignore` + claves seguras + reglas | ✅ HECHO (deploy RTDB confirmado el 2026-07-13) |
-| **M1 — Identidad** | Auth + perfiles + ajustes locales + familias | 🟡 **EN MARCHA** (1.A cerrada 2026-07-13; §1.B, §1.C y §1.D pendientes) |
+| **M1 — Identidad** | Auth + perfiles + ajustes locales + control items + familias | 🟡 **EN MARCHA** (1.A cerrada 2026-07-13; §1.B, §1.C, §1.D control items y §1.E familias pendientes) |
 | **M2 — Historial + PWA** | Snapshot en validar + manifest + SW + offline | ⬜ |
 | **M3 — App Android** | Capacitor wrapper + splash + icono + Play Store | ⬜ |
 | **M4 — Productividad** | Push, import, export, sugerencias, precios | ⬜ |
