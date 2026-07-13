@@ -547,11 +547,46 @@ button:hover {
   transition: transform 0.25s ease, visibility 0s linear 0.25s;
 }
 
-.hamburger-menu-title {
+.hamburger-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: 0 0 1rem 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e5e7e9;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+}
+
+.hamburger-menu-title {
+  margin: 0;
   color: #35BDB2;
   font-size: 1.35rem;
   font-weight: 600;
+}
+
+.hamburger-close-btn {
+  background: transparent;
+  border: 1px solid #d8dad8;
+  color: #205746;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+.hamburger-close-btn:hover {
+  background: #205746;
+  color: #fff;
 }
 
 .hamburger-section {
@@ -707,5 +742,6 @@ button:hover {
 }
 
 @media (max-width: 480px) {
-  .hamburger-menu { width: 88vw; padding: 1rem; }
+  .hamburger-menu { width: 82vw; padding: 1rem; }
+  .hamburger-close-btn { width: 44px; height: 44px; font-size: 1.3rem; }
 }

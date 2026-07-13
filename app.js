@@ -61,6 +61,7 @@ const logoutBtnEl     = document.getElementById('logout-btn');
 const hamburgerBtnEl     = document.getElementById('hamburger-btn');
 const hamburgerMenuEl    = document.getElementById('hamburger-menu');
 const hamburgerBackdropEl = document.getElementById('hamburger-backdrop');
+const hamburgerCloseBtnEl = document.getElementById('hamburger-close-btn');
 const menuProfileEmailEl = document.getElementById('menu-profile-email');
 const menuLogoutBtnEl    = document.getElementById('menu-logout-btn');
 const historyListEl      = document.getElementById('history-list');
@@ -72,6 +73,7 @@ log('[dom] refs OK', {
   validarBtn: !!validarBtn,
   hamburgerBtnEl: !!hamburgerBtnEl,
   hamburgerMenuEl: !!hamburgerMenuEl,
+  hamburgerCloseBtnEl: !!hamburgerCloseBtnEl,
   historyListEl: !!historyListEl,
 });
 
@@ -652,8 +654,9 @@ function unsubscribeCompras() {
 addBtn    .addEventListener('click',  addItem);
 inputEl   .addEventListener('keypress', e => { if (e.key === 'Enter') { log('[add] Enter'); addItem(); } });
 validarBtn.addEventListener('click',  validarComprados);
-if (hamburgerBtnEl)     hamburgerBtnEl    .addEventListener('click', toggleHamburger);
+if (hamburgerBtnEl)      hamburgerBtnEl    .addEventListener('click', toggleHamburger);
 if (hamburgerBackdropEl) hamburgerBackdropEl.addEventListener('click', closeHamburger);
+if (hamburgerCloseBtnEl)  hamburgerCloseBtnEl .addEventListener('click', closeHamburger);
 document.addEventListener('click', e => {
   if (!popupEl) return;
   if (popupEl.classList.contains('hidden')) return;
