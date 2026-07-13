@@ -504,7 +504,7 @@ function actionCodeSettings() {
 const AUTH_ERROR_MAP = {
   'auth/invalid-email':          'Email no valido. Revisalo e intentalo de nuevo.',
   'auth/missing-email':          'Introduce tu email.',
-  'auth/quota-exceeded':         'Has superado la cuota de envios. Intentalo mas tarde.',
+  'auth/quota-exceeded':         'Has superado la cuota diaria de envios de email (plan Spark gratuito de Firebase). Se resetea a medianoche (hora del Pacifico). Si necesitas mas volumen, actualiza a Blaze (pay-as-you-go) en Firebase Console.',
   'auth/network-request-failed': 'Error de red. Comprueba tu conexion.',
   'auth/missing-continue-uri':   'Config: anade este dominio a Authorized domains.',
   'auth/unauthorized-continue-uri': 'Config: la URL de retorno no esta autorizada.',
@@ -518,7 +518,9 @@ function requireAuth(label) {
 }
 function showAuthView(state, opts) {
   if (!authModalEl || !authFormEl) return;
-  log('[auth] showAuthView', state, opts);
+  // Log con objeto (en vez de args sueltos) para evitar confusion tipo
+  // "[auth] showAuthView form undefined" cuando opts no se pasa.
+  log('[auth] showAuthView', { state, opts });
   authFormEl.classList.remove('hidden');
   if (authErrorEl) { authErrorEl.classList.add('hidden'); authErrorEl.textContent = ''; }
   if (authMessageEl) authMessageEl.classList.add('hidden');
