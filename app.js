@@ -18,7 +18,7 @@ const logerr = (...a) => {              console.error(...a); };
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
-import { getDatabase, ref, onValue, push, update, remove } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+import { getDatabase, ref, onValue, push, update, remove, connectDatabaseEmulator } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
 
 // Firebase config (externalizada) — loader transparente, ver ./firebase-config.js
 import { firebaseConfig } from "./firebase-config.js";
@@ -202,9 +202,6 @@ function cerrarPopup() {
 // push, update, remove). Ver dev-isolation.txt.
 // ============================================================
 if (window.location.search.includes('env=emul')) {
-  const { connectDatabaseEmulator } = await import(
-    "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js"
-  );
   connectDatabaseEmulator(db, 'localhost', 9000);
   log('[firebase] usando EMULADOR local');
 }
