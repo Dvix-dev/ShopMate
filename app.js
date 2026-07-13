@@ -14,6 +14,12 @@ const warn   = (...a) => { if (DEBUG) console.warn (...a); };
 const logerr = (...a) => {              console.error(...a); };
 
 // ============================================================
+// ENV detection (constante global segun el flag ?env=emul)
+// ============================================================
+const IS_EMULATOR = window.location.search.includes('env=emul');
+log('[env] IS_EMULATOR=', IS_EMULATOR);
+
+// ============================================================
 // Firebase
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
@@ -23,6 +29,7 @@ import {
   getAuth, onAuthStateChanged,
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
   signOut, connectAuthEmulator,
+  signInAnonymously, updateProfile,  // emulador: auto-sign-in "test" (sin email-link)
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
 
 // Firebase config (externalizada) — loader transparente, ver ./firebase-config.js
@@ -516,6 +523,31 @@ function requireAuth(label) {
   if (!auth || !auth.currentUser) { warn('[auth] accion bloqueada (sin user):', label); return false; }
   return true;
 }
+// ============================================================
+// emulatorSignInTest: signInAnonymously + updateProfile='test'.
+// Solo se usa en emulador (?env=emul). En prod NUNCA se llama.
+// Semantica:
+//   - user es null cuando se entra aqui (lo garantiza el caller
+//     onAuthStateChanged). Si ya hay sesion persistida en el
+//     emulador (--export-on-exit), este path no corre.
+//   - No pide contrasena: signInAnonymously crea una cuenta
+//     anonima temporal en el emulador Auth.
+//   - Idempotente respecto a displayName: solo lo setea si esta
+//     vacio, para no pisar el nombre en sesiones persistidas.
+// ============================================================
+async function emulatorSignInTest() {
+  try {
+    const cred = await signInAnonymously(auth);
+    if (cred && cred.user && !cred.user.displayName) {
+      await updateProfile(cred.user, { displayName: 'test' });
+    }
+    log('[emul] auto-sign-in OK (displayName=test, uid=' + (cred && cred.user && cred.user.uid) + ')');
+    return true;
+  } catch (err) {
+    logerr('[emul] auto-sign-in ERROR', err && err.code, err && err.message);
+    return false;
+  }
+}
 function showAuthView(state, opts) {
   if (!authModalEl || !authFormEl) return;
   // Log con objeto (en vez de args sueltos) para evitar confusion tipo
@@ -644,19 +676,34 @@ onAuthStateChanged(auth, async user => {
   // (Bug reportado en mobile 2026-07-13.)
   try {
     if (user) {
-      log('[auth] signed-in', user.email);
+      // En emulador: user es anonimo + displayName='test' (sin email).
+      // En prod: user tiene email. Mostrar el nombre visible primero
+      // (test), luego email como fallback, luego el UID como ultimo
+      // recurso (en prod nunca llegamos aqui porque el user tiene email).
+      log('[auth] signed-in', user.displayName || user.email || user.uid);
       hideAuthModal();
-      if (menuProfileEmailEl) menuProfileEmailEl.textContent = user.email || user.uid;
+      if (menuProfileEmailEl) menuProfileEmailEl.textContent = user.displayName || user.email || user.uid;
       showAppContent();
       subscribeItems();
       subscribeCompras();
     } else {
-      log('[auth] signed-out');
+      log('[auth] signed-out', { isEmulator: IS_EMULATOR });
       unsubscribeItems();
       unsubscribeCompras();
       if (menuProfileEmailEl) menuProfileEmailEl.textContent = '—';
       closeHamburger();
       hideAppContent();
+      // En emulador: auto-sign-in como "test" (anonimo + displayName=test)
+      // en lugar de mostrar la auth modal. Asi la app entra directamente
+      // sin email-link ni contrasena (es una cuenta anonima del emulador,
+      // no requiere password). Si ya existe sesion persistida en el
+      // emulador (--export-on-exit), onAuthStateChanged nunca dispara
+      // con null, asi que este codigo solo corre en arranque limpio o
+      // tras un signOut explicito.
+      if (IS_EMULATOR) {
+        const ok = await emulatorSignInTest();
+        if (ok) return; // onAuthStateChanged re-disparara con user
+      }
       const completed = await completeSignInFromLink();
       if (!completed) showAuthView('form');
     }
@@ -669,12 +716,12 @@ onAuthStateChanged(auth, async user => {
 // ============================================================
 // Emulador local (RTDB:9000 + Auth:9099)
 // ============================================================
-if (window.location.search.includes('env=emul')) {
+if (IS_EMULATOR) {
   try {
     connectDatabaseEmulator(db,   'localhost', 9000);
     connectAuthEmulator   (auth, 'localhost', 9099);
     log('[firebase] usando EMULADOR local (RTDB:9000 + Auth:9099)');
-    warn('[firebase] Auth emulador NO envia emails reales — el link aparece en los logs');
+    warn('[firebase] Auth emulador: auto-sign-in como "test" (anonimo, sin contrasena, sin email-link)');
   } catch (err) { logerr('[firebase] connect emulador ERROR', err); }
 }
 
@@ -691,6 +738,15 @@ if (window.location.search.includes('env=emul')) {
 let authStateResolved = false;
 const authFallbackTimer = setTimeout(() => {
   if (!authStateResolved) {
+    // En emulador el auto-sign-in es asincrono (signInAnonymously +
+    // updateProfile) y puede tardar algo mas en arrancar (Firebase
+    // Auth init). Si disparamos la auth modal aqui, rompemos el
+    // flujo "entra directo". Dejamos que emulatorSignInTest()
+    // resuelva el estado por si solo.
+    if (IS_EMULATOR) {
+      log('[emul] auth fallback 5s saltado (auto-sign-in asincrono en curso)');
+      return;
+    }
     logerr('[auth] onAuthStateChanged no disparo en 5s, forzando auth modal');
     showAuthView('form');
   }

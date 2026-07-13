@@ -97,10 +97,29 @@
      emulador local, sin tocar la nube.
 
 -------------------------------------------------------------
- 3) PROBAR AUTH (email-link) EN LOCAL
+ 3) PROBAR AUTH EN LOCAL (auto sign-in como "test" por defecto)
 -------------------------------------------------------------
-   El emulador Auth NO envia emails reales. Para testear el
-   flujo end-to-end paso a paso:
+   Por defecto, en el emulador (?env=emul) la app hace AUTO
+   sign-in como usuario "test" (anonimo + displayName='test')
+   sin pedir contrasena ni email-link. Asi puedes probar la
+   lista y el historial directamente: tras arrancar el
+   emulador (paso 1) y abrir http://localhost:8080/?env=emul,
+   veras en consola "[emul] auto-sign-in OK (displayName=test,
+   uid=...)" y el drawer lateral mostrara "test" en el perfil.
+   Sin esto, habria que copiar manualmente el magic link del
+   UI de emuladores cada vez que arrancas.
+
+   Si aun asi quieres probar el flujo email-link "real"
+   end-to-end (mas realista), tienes dos opciones:
+     A) Desactivar temporalmente el auto-sign-in en app.js
+        (comenta el bloque `if (IS_EMULATOR) {...}` dentro del
+        callback onAuthStateChanged).
+     B) Usar el UI del emulador (http://127.0.0.1:4000/auth)
+        para gestionar usuarios manualmente.
+
+   En cualquier caso, el emulador Auth NO envia emails
+   reales. Para testear el flujo paso a paso (con auto-sign-in
+   desactivado via opcion A):
 
    3.1 En la app, escribe tu email y pulsa "Enviar enlace".
        El modal cambia a "Revisa tu correo".
