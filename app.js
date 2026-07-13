@@ -19,6 +19,11 @@ const logerr = (...a) => {              console.error(...a); };
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
 import { getDatabase, ref, onValue, push, update, remove, connectDatabaseEmulator } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+import {
+  getAuth, onAuthStateChanged,
+  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
+  signOut, connectAuthEmulator,
+} from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
 
 // Firebase config (externalizada) — loader transparente, ver ./firebase-config.js
 import { firebaseConfig } from "./firebase-config.js";
@@ -27,6 +32,8 @@ log('[firebase] init con proyecto', firebaseConfig.projectId);
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const db = getDatabase(app);
+const auth = getAuth(app);
+log('[auth] instancia inicializada');
 
 // ============================================================
 // Referencias al DOM
@@ -36,12 +43,29 @@ const inputEl     = document.getElementById('item-input');
 const addBtn      = document.getElementById('add-btn');
 const validarBtn  = document.getElementById('validar-btn');
 const popupEl     = document.getElementById('nota-popup');
+const appContentEl    = document.getElementById('app-content');
+const authModalEl     = document.getElementById('auth-modal');
+const authFormEl      = document.getElementById('auth-form');
+const authEmailEl     = document.getElementById('auth-email');
+const authSendBtnEl   = document.getElementById('auth-send');
+const authCancelBtnEl = document.getElementById('auth-cancel');
+const authErrorEl     = document.getElementById('auth-error');
+const authMessageEl   = document.getElementById('auth-message');
+const userInfoEl      = document.getElementById('user-info');
+const userEmailEl     = document.getElementById('user-email');
+const logoutBtnEl     = document.getElementById('logout-btn');
 log('[dom] refs OK', {
   checklistEl: !!checklistEl,
   inputEl: !!inputEl,
   addBtn: !!addBtn,
   validarBtn: !!validarBtn,
   popupEl: !!popupEl,
+  appContentEl: !!appContentEl,
+  authModalEl: !!authModalEl,
+  authFormEl: !!authFormEl,
+  authEmailEl: !!authEmailEl,
+  userInfoEl: !!userInfoEl,
+  logoutBtnEl: !!logoutBtnEl,
 });
 
 // ============================================================
@@ -119,6 +143,7 @@ function renderLista(snapshot) {
 // Anadir item (modulo aislado)
 // ============================================================
 function addItem() {
+  if (!requireAuth('addItem')) return;
   const raw = inputEl.value.trim();
   log('[add] click, raw=', raw);
   const { nombre, nota } = procesarInput(raw);
@@ -144,6 +169,7 @@ function addItem() {
 // Validar y eliminar marcados (modulo aislado)
 // ============================================================
 function validarComprados() {
+  if (!requireAuth('validarComprados')) return;
   log('[validator] click');
   onValue(ref(db, 'items'), snapshot => {
     const toRemove = [];
@@ -204,24 +230,295 @@ function cerrarPopup() {
 // mas abajo, sin onclick en HTML.
 
 // ============================================================
+// Auth (Fase 1.A)
+// Flujo: email-link magic-link (passwordless). onAuthStateChanged
+// es la fuente de verdad: si hay user → ocultar modal, mostrar
+// #app-content, suscribirse a /items, pintar email en cabecera.
+// Si no hay user → ocultar #app-content, mostrar modal, y detectar
+// si el navegador viene del email-link para completar el login.
+// ============================================================
+const AUTH_STORAGE_EMAIL = 'shopmate:auth:email';
+const AUTH_MAX_AGE_MS    = 24 * 60 * 60 * 1000; // 24h
+
+function actionCodeSettings() {
+  // Mismo origen donde está montada la app. handleCodeInApp=true
+  // es OBLIGATORIO para que Firebase gestione el link dentro de la
+  // app en lugar de saltar a la web de cuentas de Google.
+  // La URL debe estar en Authorized domains en Firebase Console.
+  return {
+    url: window.location.origin + window.location.pathname,
+    handleCodeInApp: true,
+  };
+}
+
+const AUTH_ERROR_MAP = {
+  'auth/invalid-email':          'Email no válido. Revísalo e inténtalo de nuevo.',
+  'auth/missing-email':          'Introduce tu email.',
+  'auth/quota-exceeded':         'Has superado la cuota de envíos. Inténtalo más tarde.',
+  'auth/network-request-failed': 'Error de red. Comprueba tu conexión.',
+  'auth/missing-continue-uri':   'Config: añade este dominio a Authorized domains en Firebase Console.',
+  'auth/unauthorized-continue-uri': 'Config: la URL de retorno no está autorizada.',
+  'auth/invalid-action-code':    'El enlace ha expirado o ya se usó. Vuelve a pedir uno.',
+  'auth/expired-action-code':    'El enlace ha expirado. Vuelve a pedir uno.',
+};
+
+function authErrorMessage(code) {
+  return AUTH_ERROR_MAP[code] || `Error desconocido (${code}). Mira la consola.`;
+}
+
+// requireAuth: guard para acciones que tocan RTDB.
+// Antes de endurecer las RTDB rules (commit 2, auth != null) las
+// acciones funcionaban sin auth; tras endurecerlas, addItem y
+// validarComprados fallarían con PERMISSION_DENIED si el usuario
+// no está logueado. Esta función centraliza la verificación y
+// deja un log claro de quién intentó qué sin sesión.
+function requireAuth(label = 'acción') {
+  if (!auth || !auth.currentUser) {
+    warn('[auth] acción bloqueada (sin user):', label);
+    return false;
+  }
+  return true;
+}
+
+function showAuthView(state, opts = {}) {
+  if (!authModalEl || !authFormEl) return;
+  log('[auth] showAuthView', state, opts);
+  authFormEl.classList.remove('hidden');
+  if (authErrorEl)   { authErrorEl.classList.add('hidden');   authErrorEl.textContent = ''; }
+  if (authMessageEl) authMessageEl.classList.add('hidden');
+  if (authCancelBtnEl) authCancelBtnEl.classList.add('hidden');
+
+  switch (state) {
+    case 'form':
+      if (authEmailEl) {
+        authEmailEl.value = opts.email || '';
+        authEmailEl.focus();
+      }
+      break;
+    case 'sent':
+      authFormEl.classList.add('hidden');
+      if (authCancelBtnEl) authCancelBtnEl.classList.remove('hidden');
+      if (authMessageEl) {
+        authMessageEl.classList.remove('hidden');
+        authMessageEl.textContent = `Hemos enviado un enlace a ${opts.email}. Ábrelo desde este dispositivo para entrar.`;
+      }
+      break;
+    case 'completing':
+      authFormEl.classList.add('hidden');
+      if (authMessageEl) {
+        authMessageEl.classList.remove('hidden');
+        authMessageEl.textContent = 'Completando acceso...';
+      }
+      break;
+  }
+  authModalEl.classList.remove('hidden');
+}
+
+function hideAuthModal() {
+  if (!authModalEl) return;
+  authModalEl.classList.add('hidden');
+  log('[auth] modal oculto');
+}
+
+function showAppContent() {
+  if (appContentEl) { appContentEl.classList.remove('hidden'); appContentEl.style.display = ''; }
+  if (userInfoEl)    userInfoEl.classList.remove('hidden');
+  log('[auth] appContent + user-info visibles');
+}
+
+function hideAppContent() {
+  if (appContentEl) { appContentEl.classList.add('hidden'); appContentEl.style.display = 'none'; }
+  if (userInfoEl)    userInfoEl.classList.add('hidden');
+  log('[auth] appContent + user-info ocultos');
+}
+
+function showAuthError(message) {
+  if (!authErrorEl) {
+    logerr('[auth] no se puede mostrar error visible, #auth-error falta', message);
+    return;
+  }
+  authErrorEl.textContent = message;
+  authErrorEl.classList.remove('hidden');
+}
+
+function readStoredEmail() {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_EMAIL);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !parsed.email || !parsed.ts) return null;
+    if (Date.now() - parsed.ts > AUTH_MAX_AGE_MS) {
+      warn('[auth] email persistido expirado (>24h), descartando');
+      return null;
+    }
+    return parsed.email;
+  } catch (_err) {
+    return null;
+  }
+}
+
+function persistEmail(email) {
+  try {
+    localStorage.setItem(AUTH_STORAGE_EMAIL,
+      JSON.stringify({ email, ts: Date.now() }));
+  } catch (_err) { /* ignore quota / privacy mode */ }
+}
+
+function clearStoredEmail() {
+  try { localStorage.removeItem(AUTH_STORAGE_EMAIL); } catch (_err) {}
+}
+
+async function sendSignInLink(email) {
+  log('[auth] sendSignInLink', email);
+  if (authSendBtnEl) authSendBtnEl.disabled = true;
+  try {
+    await sendSignInLinkToEmail(auth, email, actionCodeSettings());
+    persistEmail(email);
+    showAuthView('sent', { email });
+  } catch (err) {
+    logerr('[auth] sendSignInLink ERROR', err);
+    showAuthError(authErrorMessage(err && err.code));
+    showAuthView('form', { email });
+  } finally {
+    if (authSendBtnEl) authSendBtnEl.disabled = false;
+  }
+}
+
+async function completeSignInFromLink() {
+  if (!isSignInWithEmailLink(auth, window.location.href)) return false;
+  log('[auth] completeSignInFromLink (venimos del email)');
+  showAuthView('completing');
+  let email = readStoredEmail();
+  if (!email) {
+    // Email enviado desde otro dispositivo o tras limpiar localStorage.
+    email = window.prompt('Confirma tu email para completar el inicio de sesión:');
+    if (!email) {
+      showAuthError('Necesitamos tu email para completar el acceso.');
+      showAuthView('form');
+      return false;
+    }
+  }
+  try {
+    await signInWithEmailLink(auth, email, window.location.href);
+    log('[auth] signInWithEmailLink OK', email);
+    clearStoredEmail();
+    return true;  // onAuthStateChanged tomará el relevo.
+  } catch (err) {
+    logerr('[auth] signInInWithEmailLink ERROR', err);
+    showAuthError(authErrorMessage(err && err.code));
+    showAuthView('form', { email });
+    return false;
+  }
+}
+
+async function handleLogout() {
+  log('[auth] handleLogout click');
+  try {
+    await signOut(auth);
+    log('[auth] signOut OK');
+    clearStoredEmail();
+    // onAuthStateChanged disparará con user=null y mostrará el modal.
+  } catch (err) {
+    logerr('[auth] signOut ERROR', err);
+    showAuthError('No pudimos cerrar sesión. Inténtalo de nuevo.');
+  }
+}
+
+// Submit del form de email.
+if (authFormEl && authEmailEl) {
+  authFormEl.addEventListener('submit', e => {
+    e.preventDefault();
+    const raw = authEmailEl.value.trim();
+    log('[auth] submit', raw);
+    if (!raw) { showAuthError('Introduce un email.'); return; }
+    // Regex pragmático (no RFC 5322 estricto). Suficiente para UX; el
+    // server de Firebase rechazará con auth/invalid-email si está mal.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+      showAuthError('Formato de email no válido.');
+      return;
+    }
+    sendSignInLink(raw);
+  });
+} else {
+  warn('[auth] #auth-form o #auth-email faltan — el login no funcionará');
+}
+
+// Botón Cancelar del estado 'sent'.
+if (authCancelBtnEl) {
+  authCancelBtnEl.addEventListener('click', () => {
+    log('[auth] cancelar envio -> volver a form');
+    clearStoredEmail();
+    showAuthView('form');
+  });
+}
+
+// Logout desde cabecera.
+if (logoutBtnEl) {
+  logoutBtnEl.addEventListener('click', handleLogout);
+} else {
+  warn('[auth] #logout-btn no encontrado — el usuario no podrá cerrar sesión desde la cabecera');
+}
+
+// Auth state observer: fuente de verdad de la UI.
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    log('[auth] signed-in uid=', user.uid, 'email=', user.email);
+    hideAuthModal();
+    if (userEmailEl) userEmailEl.textContent = user.email || user.uid;
+    showAppContent();
+    subscribeItems();
+  } else {
+    log('[auth] signed-out (o nunca llegado)');
+    unsubscribeItems();
+    if (userEmailEl) userEmailEl.textContent = '';
+    hideAppContent();
+    // Antes de mostrar el form, mira si el navegador viene del
+    // email (caso típico de continuar el login desde el link).
+    const completed = await completeSignInFromLink();
+    if (!completed) showAuthView('form');
+  }
+});
+
+// ============================================================
 // Base de datos isolada para testing
-// Bloque ejecutado ANTES del listener `onValue` para que el emulador
-// tome el control de RTDB antes de cualquier operacion (suscripcion,
-// push, update, remove). Ver dev-isolation.txt.
+// Bloque ejecutado ANTES del subscribeItems() para que el emulador
+// tome el control de RTDB antes de cualquier operacion. Auth emulator
+// también se conecta aquí (puerto 9099, separado del 9000 de RTDB):
+// Ver dev-isolation.txt.
 // ============================================================
 if (window.location.search.includes('env=emul')) {
-  connectDatabaseEmulator(db, 'localhost', 9000);
-  log('[firebase] usando EMULADOR local');
+  try {
+    connectDatabaseEmulator(db,   'localhost', 9000);
+    connectAuthEmulator   (auth, 'localhost', 9099);
+    log('[firebase] usando EMULADOR local (RTDB:9000 + Auth:9099)');
+    warn('[firebase] Auth emulador NO envía emails reales — el link aparece en los logs del emulador');
+  } catch (err) {
+    logerr('[firebase] connect emulador ERROR', err);
+  }
 }
 
 // ============================================================
-// Sincronizacion RTDB
-// Suscrita DESPUES del bloque del emulador por la razón de arriba.
+// Items: subscribe/unsubscribe gateado por el auth state observer
+// Mientras el usuario no esté autenticado, NO se suscribe a RTDB
+// (las reglas endurecidas `auth != null` rechazan reads;
+// centralizar el control aquí evita errores PERMISSION_DENIED
+// ruidosos). Ambos helpers son idempotentes.
 // ============================================================
-onValue(ref(db, 'items'),
-  renderLista,
-  err => logerr('[firebase] onValue ERROR', err)
-);
+let unsubItems = null;
+function subscribeItems() {
+  if (unsubItems) return;
+  log('[firebase] subscribe /items');
+  unsubItems = onValue(ref(db, 'items'),
+    renderLista,
+    err => logerr('[firebase] onValue ERROR', err)
+  );
+}
+function unsubscribeItems() {
+  if (!unsubItems) return;
+  unsubItems();
+  unsubItems = null;
+  log('[firebase] unsubscribe /items');
+}
 
 // ============================================================
 // Eventos UI
@@ -239,12 +536,31 @@ document.addEventListener('click', e => {
     popupEl.classList.add('hidden');
   }
 });
-// Cerrar popup con Escape
+// Escape: cerrar popup de notas, o actuar sobre auth-modal según estado.
+// Auth-modal es bloqueante por diseño (David lo eligió fullscreen en
+// la pregunta 1 del kickoff de Fase 1.A), así que Escape NO cierra el
+// flow. En su lugar: 'form' → refocus del input email; 'sent' →
+// dispara el botón Cancelar; 'completing' → no-op para no abortar
+// una transacción Firebase en curso.
 document.addEventListener('keydown', e => {
-  if (!popupEl) return;
-  if (e.key === 'Escape' && !popupEl.classList.contains('hidden')) {
+  if (e.key !== 'Escape') return;
+  if (popupEl && !popupEl.classList.contains('hidden')) {
     log('[popup] Escape -> cerrar');
     popupEl.classList.add('hidden');
+  }
+  if (authModalEl && !authModalEl.classList.contains('hidden')) {
+    const formVisible   = authFormEl && !authFormEl.classList.contains('hidden');
+    const cancelVisible = authCancelBtnEl && !authCancelBtnEl.classList.contains('hidden');
+    if (formVisible && authEmailEl) {
+      authEmailEl.focus();
+      log('[auth] Escape -> focus email input');
+    } else if (cancelVisible) {
+      log('[auth] Escape -> cancelar envio (botón Cancelar)');
+      authCancelBtnEl.click();
+    } else {
+      // 'completing' state: ignorar para no abortar el flujo Firebase.
+      log('[auth] Escape ignorado en completing (mid-flujo)');
+    }
   }
 });
 

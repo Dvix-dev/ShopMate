@@ -16,10 +16,15 @@
 
 <header>
   <h1><img src="assets/logo.png" alt="Logo"> ShopMate</h1>
+  <div id="user-info" class="user-info hidden">
+    <span id="user-email" title="Identificado como"></span>
+    <button type="button" id="logout-btn" title="Cerrar sesión">Salir</button>
+  </div>
 </header>
 
 <body>
-  <div class="container">
+  <div id="app-content" class="app-content hidden">
+    <div class="container">
     <div id="list-header">
       <h2>Lista de Compra Conjunta</h2>
     </div>
@@ -34,6 +39,7 @@
     </div>
 
     <button type="button" id="validar-btn">Validar compra ✔</button>
+    </div>
   </div>
 
   <div id="nota-popup" class="popup hidden">
@@ -41,6 +47,28 @@
       <div class="popup-close" id="popup-close">❌</div>
       <h3 id="popup-titulo"></h3>
       <p id="popup-nota"></p>
+    </div>
+  </div>
+
+  <div id="auth-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title" aria-describedby="auth-help">
+    <div class="modal-card">
+      <h3 id="auth-title">Identifícate</h3>
+      <p id="auth-help" class="modal-help">Te enviaremos un enlace a tu correo para iniciar sesión. Sin contraseñas: solo un click en el email.</p>
+
+      <form id="auth-form" novalidate>
+        <label for="auth-email" class="modal-label">Tu correo</label>
+        <input type="email" id="auth-email" name="email"
+               placeholder="ejemplo@correo.com" required
+               autocomplete="email" inputmode="email"
+               spellcheck="false" autocapitalize="off" />
+        <div class="modal-actions">
+          <button type="button" id="auth-cancel" class="hidden">Cancelar</button>
+          <button type="submit" id="auth-send">Enviar enlace</button>
+        </div>
+      </form>
+
+      <div id="auth-error" class="modal-error hidden" role="alert" aria-live="polite"></div>
+      <div id="auth-message" class="modal-message hidden" role="status" aria-live="polite"></div>
     </div>
   </div>
 
