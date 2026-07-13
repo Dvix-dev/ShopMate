@@ -81,12 +81,17 @@ log('[dom] refs OK', {
 // Cap blando por colección
 // items: 500 (defensa-en-profundidad UX).
 // compras: 20 (limite auto-trim para ahorrar almacenamiento).
-// Ambos enforzados client-side porque el emulador RTDB v4.11
-// rechaza `newData.numChildren()`. La validación de esquema
-// sigue endurecida en database.rules.json (server-side).
+// items por compra: 100 (defensa-en-profundidad UX contra un
+//   usuario que valide 1000+ items en una sola compra).
+// Todos enforzados client-side porque el motor de reglas RTDB
+// **no soporta** `newData.numChildren()` (confirmado en deploy
+// prod 2026-07-13: error "No such method/property 'numChildren'").
+// La validación de esquema (nombre, comprado, nota, fecha) sigue
+// endurecida en database.rules.json (server-side).
 // ============================================================
-const MAX_ITEMS   = 500;
-const MAX_COMPRAS = 20;
+const MAX_ITEMS            = 500;
+const MAX_COMPRAS          = 20;
+const MAX_ITEMS_PER_COMPRA = 100;
 let currentItemCount = 0;
 log('[cap] MAX_ITEMS', MAX_ITEMS, 'MAX_COMPRAS', MAX_COMPRAS);
 
@@ -197,6 +202,18 @@ async function validarComprados() {
     });
     log('[validator] items marcados', toProcess.length);
     if (toProcess.length === 0) return;
+    // Cap blando: si intentas archivar mas de MAX_ITEMS_PER_COMPRA
+    // items a la vez, aborta. No se puede enforzar server-side
+    // porque el motor de reglas RTDB no soporta numChildren()
+    // (deploy prod 2026-07-13 rechazo la regla). Defense-in-depth
+    // UX: mejor avisar al usuario que spammear 1000 items en una
+    // sola compra que revienten el nodo en RTDB. 100 items = compra
+    // muy grande pero plausible (un super real rara vez pasa de 50);
+    // el cap esta dimensionado contra abuso/spam, no contra uso normal.
+    if (toProcess.length > MAX_ITEMS_PER_COMPRA) {
+      logerr('[validator] cap MAX_ITEMS_PER_COMPRA excedido', { count: toProcess.length, cap: MAX_ITEMS_PER_COMPRA });
+      return;
+    }
 
     // 2. Para cada item, usa runTransaction para borrarlo atomicamente.
     //    Si la transaccion NO se committed (otro cliente ya borro/desmarco

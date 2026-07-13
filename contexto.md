@@ -184,10 +184,10 @@ Restauración recomendada: `git checkout 4f15c99 -- app.js main.css list.html`.
 8. 🟢 **Console logs**: `app.js` usa helper `log/warn/logerr` con prefijo de módulo. Para silenciarlos en local: `localStorage.setItem('shopmate:debug','0')`. Definido por regla activa #04.
 9. 🟢 **Aislamiento dev/prod**: ver `dev-isolation.txt` para no contaminar la lista familiar cuando se prueba en local.
 10. 🟢 **Historial (Fase 2.A)**: cada "Validar compra" archiva los items marcados a `/shared/compras/{pushId}/{fecha,items}` y los borra de `/items/`. El drawer lateral (menú ☰) los renderiza como acordeón con `<details>/<summary>`, ordenados por fecha desc. Cap **20 compras** auto-trim client-side. No incluye authorship (uid/displayName) — diferido a §1.B Perfiles.
-11. 🟢 **Polish mobile-drawer + a11y + rules (2026-07-13)**:
+11. 🟢 **Polish mobile-drawer + a11y + cap items/compra (2026-07-13)**:
     - Drawer del menú ☰: botón ✕ cerrar (44px en mobile), header sticky (permanece visible al scrollear el historial), ancho 82vw en <480px.
     - **Focus management** (N1 a11y): al abrir, foco al close button; al cerrar, foco devuelto al trigger. Focus trap Tab/Shift+Tab dentro del drawer.
-    - **Rules RTDB** (N2): cap `newData.numChildren() <= 100` en `/shared/compras/$compraId/items/` (defensa-en-profundidad; puede no activarse en el emulador v4.11).
+    - **Cap items/compra (N2)**: 100 items max por compra, enforzado **client-side** en `validarComprados()` (`MAX_ITEMS_PER_COMPRA = 100`). **NO server-side** porque el motor de reglas RTDB **no soporta** `newData.numChildren()` — el deploy prod del 2026-07-13 rechazo la regla con `Error: No such method/property 'numChildren'`. Mismo motivo por el que `/items/` tampoco tiene cap server-side. La validación de esquema (nombre, comprado, nota, fecha) SI es server-side.
 
 ---
 

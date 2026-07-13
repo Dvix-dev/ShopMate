@@ -177,7 +177,7 @@
 - [x] **Cierre de sesión cierra también el drawer** (en `handleLogout`).
 - [x] **Mobile polish (2026-07-13)**: botón ✕ cerrar dentro del drawer (44px target táctil en mobile), header sticky (no se va al scrollear el historial), drawer reducido a 82vw en <480px.
 - [x] **N1 a11y focus management (2026-07-13)**: al abrir el drawer, foco al botón cerrar; al cerrar, foco devuelto al ☰. Focus trap Tab/Shift+Tab dentro del drawer.
-- [x] **N2 rules cap items/compra (2026-07-13)**: `newData.numChildren() <= 100` en `/shared/compras/$compraId/items/` (defensa-en-profundidad server-side; el cap puede no activarse en el emulador v4.11 igual que pasó con `/items/`).
+- [x] **N2 cap items/compra (2026-07-13)**: cap de **100 items por compra**, enforzado **client-side** en `validarComprados()` (`MAX_ITEMS_PER_COMPRA = 100`). **NO server-side**: el motor de reglas RTDB **no soporta** `newData.numChildren()` — el deploy prod del 2026-07-13 fallo con `Error: No such method/property 'numChildren'`. Mismo motivo por el que `/items/` tampoco tiene cap server-side.
 
 ### 2.D — Mejoras de UX
 
