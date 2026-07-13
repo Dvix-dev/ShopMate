@@ -51,14 +51,10 @@ desktop.ini
 npm-debug.log*
 yarn-error.log*
 
-# ── Firebase emulators (dev local; exports + logs) ──
+# ── Firebase emulators (dev local; exports. Logs ya capturados por *.log) ──
 emulator-data/
 emulator-data/database_export/
 emulator-data/authentication_export/
-firebase-debug.log
-database-debug.log
-auth-debug.log
-ui-debug.log
 
 # ── Scripts helper temporales dejados por sesiones del AI (no commitear) ──
 tmp_*.js
