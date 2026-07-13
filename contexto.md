@@ -128,7 +128,7 @@ Cada compra es un push-key con `{ fecha, items }`:
 - `fecha`: `serverTimestamp()` (ms epoch).
 - `items`: los keys originales de `/items/` (preservados para trazabilidad post-mortem).
 - Cap client-side: **20 compras**, las más antiguas se borran auto al llegar al límite (`trimCompras()`).
-- Cuando aterrice §1.D Familias, este path se migra atómicamente a `/families/{fid}/compras/` per regla IA #11.
+- Cuando aterrice §1.E Familias, este path se migra atómicamente a `/families/{fid}/compras/` per regla IA #11.
 
 ---
 

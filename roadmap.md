@@ -143,7 +143,7 @@
 - [x] **Mover items marcados al pulsar Validar compra** (modo compat `/shared/compras/`): cada compra = `{ fecha, items: { [id]: { nombre, nota? } } }` con `serverTimestamp()` para evitar client clock-skew. _Implementado 2026-07-13. No incluye `addedBy/boughtBy` (uid/displayName) — diferido a §1.B Perfiles._
 - [x] **Historial visible en el menú hamburguesa** con compras agrupadas (acordeón con `<details>/<summary>`, collapsed por defecto).
 - [x] **Límite de 20 compras auto-trim** client-side: si el listener detecta `size > 20`, dispara `trimCompras()` que borra las más antiguas. Idempotente; race asumible en app familiar.
-- [x] **Compatibilidad**: escrito a `/shared/compras/` (mientras no exista §1.D Familias). Cuando aterrice §1.D, script atómico migra a `/families/{fid}/compras/` per regla IA #11.
+- [x] **Compatibilidad**: escrito a `/shared/compras/` (mientras no exista §1.E Familias). Cuando aterrice §1.E, script atómico migra a `/families/{fid}/compras/` per regla IA #11.
 - [ ] **"Productos frecuentes"** (count por nombre normalizado) — pendiente.
 - [ ] **Filtro de tiempo** (7d/30d/90d) — pendiente.
 - [ ] **Authorship (addedBy/boughtBy)** — pendiente §1.B.
