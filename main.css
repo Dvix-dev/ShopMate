@@ -431,7 +431,6 @@ button:hover {
 @media (max-width: 480px) {
   .modal-card                  { padding: 1.5rem 1.25rem; }
   .modal-card h3               { font-size: 1.25rem; }
-  .user-info #user-email       { max-width: 120px; }
 }
 
 /* =============================================================
