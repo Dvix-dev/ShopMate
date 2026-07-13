@@ -702,26 +702,29 @@ document.addEventListener('click', e => {
 // El selector incluye <summary> para que el usuario de teclado pueda
 // togglear el acordeon del historial con Enter/Space (Safari + spec).
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
-if (e.key === 'Tab' && hamburgerMenuEl && !hamburgerMenuEl.classList.contains('hidden')) {
-  const focusable = Array.from(hamburgerMenuEl.querySelectorAll(FOCUSABLE_SELECTOR));
-  if (focusable.length === 0) { e.preventDefault(); return; }
-  const first = focusable[0];
-  const last  = focusable[focusable.length - 1];
-  const active = document.activeElement;
-  const focusInDrawer = hamburgerMenuEl.contains(active);
-  if (!focusInDrawer) {
-    e.preventDefault();
-    first.focus({ preventScroll: true });
-  } else if (e.shiftKey && active === first) {
-    e.preventDefault();
-    last.focus({ preventScroll: true });
-  } else if (!e.shiftKey && active === last) {
-    e.preventDefault();
-    first.focus({ preventScroll: true });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Tab' && hamburgerMenuEl && !hamburgerMenuEl.classList.contains('hidden')) {
+    const focusable = Array.from(hamburgerMenuEl.querySelectorAll(FOCUSABLE_SELECTOR));
+    if (focusable.length === 0) { e.preventDefault(); return; }
+    const first = focusable[0];
+    const last  = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    const focusInDrawer = hamburgerMenuEl.contains(active);
+    if (!focusInDrawer) {
+      e.preventDefault();
+      first.focus({ preventScroll: true });
+    } else if (e.shiftKey && active === first) {
+      e.preventDefault();
+      last.focus({ preventScroll: true });
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault();
+      first.focus({ preventScroll: true });
+    }
+    return;
   }
-  return;
-}
-if (e.key !== 'Escape') return;
+
+  if (e.key !== 'Escape') return;
+
   if (hamburgerMenuEl && !hamburgerMenuEl.classList.contains('hidden')) {
     log('[hamburger] Escape -> cerrar');
     closeHamburger();
