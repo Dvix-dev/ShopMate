@@ -431,6 +431,36 @@ button:hover {
 @media (max-width: 480px) {
   .modal-card                  { padding: 1.5rem 1.25rem; }
   .modal-card h3               { font-size: 1.25rem; }
+  .auth-spam-link              { font-size: 0.8rem; padding: 0.45rem 0.65rem; }
+}
+
+/* =============================================================
+ * AUTH SPAM LINK (2026-07-13)
+ * Link secundario al final del auth modal para que el user
+ * pueda revisar su carpeta de spam si el magic link de
+ * Firebase Auth no llega al inbox. Abre Gmail en nueva pestana
+ * con el filtro de spam ya aplicado. target=_blank + rel=noopener
+ * por seguridad. No interfiere con el flujo de login (es solo
+ * un atajo externo).
+ * ============================================================= */
+.auth-spam-link {
+  display: block;
+  text-align: center;
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  color: #205746;
+  border: 1px solid #d8dad8;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  text-decoration: none;
+  font-family: inherit;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.auth-spam-link:hover {
+  background: #205746;
+  color: #fff;
+  border-color: #205746;
 }
 
 /* =============================================================
