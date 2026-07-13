@@ -15,14 +15,14 @@
         "!  auth: Not starting the auth emulator, make sure
               you have run firebase init."
       Puedes o bien:
-        - Editar firebase.json a mano (recomendado; ya está
-          hecho en el commit chore(dev) que añadió este archivo).
+        - Editar firebase.json a mano (recomendado; ya esta
+          hecho en el commit chore(dev) que anadio este archivo).
         - O correr `npx firebase init emulators` y marcar
           auth + database + ui.
    c) En app.js la rama `?env=emul` ya conecta AMBOS emuladores:
         connectDatabaseEmulator(db,   'localhost', 9000)
         connectAuthEmulator   (auth, 'localhost', 9099)
-      No hace falta tocar nada en el código.
+      No hace falta tocar nada en el codigo.
 
 -------------------------------------------------------------
  1) ARRANCAR EL EMULADOR (UNA SOLA LINEA)
@@ -46,7 +46,7 @@
      authentication_export. La siguiente vez --import los
      restaura automaticamente.
    - El UI queda en http://127.0.0.1:4000 y ahi puedes:
-       · ver items de /items/ en la pestaña Realtime Database
+       · ver items de /items/ en la pestana Realtime Database
        · ver usuarios Auth registrados + pending email-link
        · editar/borrar datos a mano para tests
    - Si en Windows el PATH no encuentra firebase-tools, asegurate
@@ -62,6 +62,20 @@
      │ Auth     │ 127.0.0.1:9099 │ http://127.0.0.1:4000/auth │
      │ Database │ 127.0.0.1:9000 │ http://127.0.0.1:4000/database │
      └──────────┴────────────────┴────────────────────────────┘
+
+   Troubleshooting puerto ocupado:
+   Si ves "address already in use" / EADDRINUSE en algun puerto
+   (9099, 9000, 4000 o 4400), hay un emulador o servicio anterior
+   ocupando ese puerto. Para liberarlo:
+     - Linux/macOS:  lsof -i :9000  ->  kill <pid>
+     - Windows bash: netstat -ano | findstr :9000  ->  taskkill /F /PID <pid>
+     - Mas simple: Ctrl+C en la terminal vieja si la tienes abierta.
+
+   Warning ignorable de CLI no autenticada:
+   Si ves "You are not currently authenticated so some features may
+   not work correctly. Please run firebase login": IGNORALO.
+   El emulador local arranca sin necesidad de login OAuth (ese
+   solo es obligatorio para `firebase deploy` a la nube).
 
 -------------------------------------------------------------
  2) USARLO CON LA APP
@@ -103,7 +117,7 @@
 
    Si reinicias el emulador SIN --import, los usuarios
    pendientes y confirmados se pierden (es un emulador). Para
-   persistir entre sesiones, mantén --import + --export-on-exit.
+   persistir entre sesiones, manten --import + --export-on-exit.
 
 -------------------------------------------------------------
  4) PARA Y LIMPIA
@@ -132,6 +146,16 @@
      en el emulador. Para testear el flow end-to-end, primero
      completa un sign-in via email-link (paso 3).
 
+   Debug cuando algo no va:
+   Si Auth o RTDB se comportan raro en local, los logs estan en
+   la raiz del proyecto:
+     - firebase-debug.log   Arranque general + warnings de CLI
+     - database-debug.log   Operaciones RTDB + reglas evaluadas
+     - auth-debug.log       Sign-in, sign-out, link generado
+     - ui-debug.log         UI del emulador
+   Abre el que toque y busca lineas que empiezen por '!' (warning)
+   o 'Error'.
+
 -------------------------------------------------------------
  RESUMEN DE PUERTOS
 -------------------------------------------------------------
@@ -142,7 +166,8 @@
 
 =============================================================
  Cualquier cambio en esta guia debe revisarse tb en el
- commit de Fase 1.A (f7e327f feat(auth)) que introduce el
- flujo; si añades un emulador extra (functions, storage),
- actualiza el bloque emulators en firebase.json + este doc.
+ commit de Fase 1.A (commits f7e327f + d5cec7d + ff37025). El
+ README.md tiene una copia parcial de esta guia con secciones
+ marcadas obsoletas (3 caminos, reglas abiertas, "Proximo nivel
+ recomendado") - actualizalas en sincronia con este archivo.
 =============================================================

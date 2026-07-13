@@ -71,7 +71,7 @@ mv list.html index.html
 - 🔐 **Identifícate (Fase 1.A)**: autenticación passwordless por email-link. Modal fullscreen bloqueante hasta completar el login (sin contraseñas — solo un click en el email). Sesión persistida automáticamente; botón "Salir" en cabecera.
 - 🐞 **Debug opcional**: `localStorage.setItem('shopmate:debug','0')` silencia los `console.log` de `app.js` (útil en producción).
 - 📝 **Notas en items**: añade `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa" (popup al pulsar el icono 📝).
-- 🧪 **Aislamiento dev/prod**: ver `dev-isolation.txt` para 3 caminos (emulador / proyecto Firebase paralelo / staging SFTP).
+- 🧪 **Aislamiento dev/prod**: `dev-isolation.txt` documenta el uso del emulador local (RTDB + Auth + UI) sin tocar la nube prod. Único camino soportado actualmente (los métodos "proyecto paralelo" y "staging SFTP" fueron retirados en commit `ff37025`).
 
 > 📝 **Nota:** el proyecto aún **no es PWA completa** (sin `manifest.json` ni service worker); ese trabajo está planificado en `roadmap.md` → Fase 2. La versión inicial (`087a2fd`) sí guardaba en `localStorage` como fallback, pero la build Firebase actual no conserva esa capa offline.
 
@@ -118,7 +118,7 @@ npx serve .
 php -S localhost:8080
 ```
 
-> **Nota:** si abres el `index.html` directamente con doble clic (`file://`) algunas funciones como los módulos ES y la conexión a Firebase pueden fallar. Usa siempre un servidor local.
+> **Nota:** si abres el `index.html` directamente con doble clic (`file://`) algunas funciones como los módulos ES y la conexión a Firebase pueden fallan. Usa siempre un servidor local.
 
 ---
 
@@ -134,12 +134,12 @@ ShopMate/
 ├── roadmap.md                # Hoja de ruta de mejoras futuras
 ├── .gitignore                # Excluye claves reales (.env, firebase-config.local.js, etc.)
 ├── .env.example              # Plantilla-documento de variables (no usada por el browser)
-├── dev-isolation.txt         # 3 caminos para aislar entorno dev del familiar de producción
+├── dev-isolation.txt         # Guía única del emulador local (RTDB + Auth + UI) tras ff37025
 ├── firebase-config.example.js  # Plantilla con placeholders (commiteada, Segura)
 ├── firebase-config.js        # Loader que prefiere .local.js y cae al .example.js
 ├── firebase-config.local.js  # ⚠️ NO COMMITEAR · Contiene tus claves reales (gitignored)
 ├── database.rules.json       # Reglas RTDB endurecidas (pendiente de deploy con firebase-tools)
-├── firebase.json             # Config de firebase-tools (apunta a database.rules.json)
+├── firebase.json             # Config de firebase-tools (auth+DB+UI emulators + database.rules.json)
 ├── .firebaserc               # Alias de proyecto: shopmate-e9195
 ├── index.html                # Página principal (renombrada desde list.html)
 ├── app.js                    # Lógica + integración Firebase (importa config del loader, sin claves)
@@ -191,16 +191,16 @@ El archivo `.vscode/sftp.json` contiene tu nombre de usuario Windows y la ruta d
 
 ## 🔐 Reglas de Realtime Database
 
-> ⚠️ **Estado actual:** las reglas endurecidas están en `database.rules.json` y el proyecto tiene el setup de `firebase-tools` listo (`firebase.json` + `.firebaserc`). Pero **NO se han desplegado todavía a Firebase** — eso requiere `firebase login` con tu cuenta de Google y es un paso interactivo que debes ejecutar tú.
+> ✅ **Estado actual:** las reglas endurecidas con `auth != null` viven en `database.rules.json` (commit `d5cec7d` chore(rules)), pero **NO se han desplegado todavía a Firebase** — sigue el paso interactivo al final. Mientras tanto, Firebase prod aún evalúa con las reglas antiguas (abiertas). El emulador local (`?env=emul`) sí evalúa las reglas nuevas (commit `ff37025` chore(dev) habilitó el bloque emulators).
 
-Las reglas actuales del proyecto son abiertas (`.read: true, .write: true`). Esto significa que **cualquier persona con la URL puede escribir**. En `database.rules.json` se incluye una propuesta endurecida:
+Las reglas en `database.rules.json` están endurecidas con `auth != null` (requieren usuario autenticado para leer y escribir). Mientras no se desplieguen a Firebase prod, las reglas desplegadas siguen siendo las antiguas (`.read/.write: true` abiertas). En local con `?env=emul` el emulador ya evalúa las reglas nuevas. Para desplegar las endurecidas a prod:
 
 - ✅ Validación de esquema: cada item debe tener `nombre` (string no vacío, máx 80) y `comprado` (boolean).
 - ✅ `nota` opcional, string de hasta 500 caracteres.
 - ✅ Tope blando de 500 items en la colección para evitar abuso (cap de **defensa-en-profundidad** enforzado en `app.js` como `MAX_ITEMS`; el cap server-side original con `newData.numChildren() <= 500` no se pudo activar porque el emulador RTDB v4.11 lo rechaza; la validación de esquema sigue siendo server-side y robusta).
 - ✅ Índice en `comprado` para queries eficientes.
 
-> 🛟 **Por qué `.write: true` y el cap se quedó en el cliente**: cuando llegue **Firebase Authentication** en Fase 1.A migramos a `auth != null`. Hasta entonces, la única defensa real era la validación de esquema (un atacante con cliente custom se saltaría cualquier cap server-side igualmente). Un cap client-side cubre el uso honesto y se documenta explícitamente como defensa-en-profundidad UX.
+> 🛟 **Auth (Fase 1.A) ya implementado** (commits `f7e327f` feat(auth) + `d5cec7d` chore(rules)). El cap de 500 items sigue client-side (`MAX_ITEMS` en `app.js`) porque el emulador RTDB v4.11 rechazaba `newData.numChildren()`. Con auth, un atacante tendría que registrar cuentas masivamente (cuota Auth del plan gratuito) para mutar datos; el cap client-side complementa como defensa-en-profundidad UX.
 
 ### Opción A — Desplegar con `firebase-tools` (CLI, recomendado)
 
@@ -213,10 +213,10 @@ npx firebase-tools login && npx firebase-tools deploy --only database --project 
 Eso hace: autenticación OAuth vía navegador + validación + publicación de las reglas. Si quieres probar antes sin tocar producción:
 
 ```bash
-npx firebase-tools emulators:start --only database --project shopmate-e9195
+npx firebase-tools emulators:start --only auth,database --project shopmate-e9195 --import=./emulator-data --export-on-exit
 ```
 
-… y tus tests contra `localhost:9000`.
+… y tus tests contra `localhost:9000` (RTDB) + `localhost:9099` (Auth). Ver `dev-isolation.txt` para el flujo local completo paso a paso.
 
 ### Opción B — Pegar manualmente en Firebase Console
 
@@ -234,9 +234,11 @@ Las reglas estrictas pueden **rechazar updates** sobre items preexistentes cuyo 
 2. Comprueba que cada item tiene `nombre` (string no vacío, ≤80) y `comprado` (boolean).
 3. Items actuales con `comprado` como string o número tendrán que corregirse a `true/false` antes de que nuevas escrituras funcionen.
 
-### Próximo nivel (recomendado)
+### Próximo nivel
 
-Ver `roadmap.md` → Fase 1: migrar a **Firebase Authentication** con magic link por email y exigir `auth != null` en `.write`. Mientras no haya auth, las reglas aquí propuestas son una mejora razonable sobre el open-access actual.
+**Fase 1.A ya implementada** (commits `f7e327f`, `d5cec7d`, `ff37025`). Pendiente de tu lado: ejecutar `firebase-tools deploy --only database` y abrir `roadmap.md` §1.A.0 con los prerrequisitos de Firebase Console.
+
+Siguientes (§1.B–§1.D): perfiles, ajustes locales y familias (migración profunda de `/items/` a `/families/{familyId}/items/` con script de copia atómica per regla IA #11). Ver `roadmap.md`.
 
 ---
 
