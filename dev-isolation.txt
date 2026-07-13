@@ -63,9 +63,8 @@
    pero la build del emulador a 2026-07 no los expone). Para evitar
    el problema, el cap por numero de items se enforza en app.js
    (`MAX_ITEMS`) y las reglas validan solo esquema (.validate
-   cascade: nombre, comprado, nota, hasChildren). Si encuentras
-   otra sintaxis con numChildren que el emulador acepte, vivamos
-   el cap server-side otra vez y borra el bloque cliente.
+   cascade: nombre, comprado, nota, hasChildren).   Si encuentras otra sintaxis con numChildren que el emulador
+   acepte, volvamos al cap server-side y borra el bloque cliente.
 
 -------------------------------------------------------------
  2. PROYECTO FIREBASE PARALELO (cuando necesites nube real)
