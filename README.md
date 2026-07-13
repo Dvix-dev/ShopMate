@@ -153,7 +153,7 @@ ShopMate/
 
 ## 🔥 Configuración de Firebase y seguridad
 
-> ✅ **Estado actual:** la migración ya está aplicada. `app.js` ya **no contiene claves reales** — importa `firebaseConfig` desde `./firebase-config.js`, que carga las claves desde `firebase-config.local.js` (gitignored). Queda como **único paso pendiente** desplegar las reglas endurecidas a Firebase (requiere login interactivo).
+> ✅ **Estado actual:** la migración ya está aplicada. `app.js` ya **no contiene claves reales** — importa `firebaseConfig` desde `./firebase-config.js`, que carga las claves desde `firebase-config.local.js` (gitignored). Las reglas RTDB endurecidas están desplegadas a Firebase prod desde 2026-07-13 (ver `roadmap.md` §1.A.Close).
 
 ### Flujo de carga
 
@@ -191,7 +191,7 @@ El archivo `.vscode/sftp.json` contiene tu nombre de usuario Windows y la ruta d
 
 ## 🔐 Reglas de Realtime Database
 
-> ✅ **Estado actual:** las reglas endurecidas con `auth != null` viven en `database.rules.json` (commit `d5cec7d` chore(rules)), pero **NO se han desplegado todavía a Firebase** — sigue el paso interactivo al final. Mientras tanto, Firebase prod aún evalúa con las reglas antiguas (abiertas). El emulador local (`?env=emul`) sí evalúa las reglas nuevas (commit `ff37025` chore(dev) habilitó el bloque emulators).
+> ✅ **Estado actual (2026-07-13):** las reglas endurecidas con `auth != null` viven en `database.rules.json` (commit `d5cec7d` chore(rules)) y están **desplegadas a Firebase prod**. Firebase prod evalúa con las reglas nuevas; el emulador local (`?env=emul`) evalúa las mismas reglas (commit `ff37025` chore(dev) habilitó el bloque emulators).
 
 Las reglas en `database.rules.json` están endurecidas con `auth != null` (requieren usuario autenticado para leer y escribir). Mientras no se desplieguen a Firebase prod, las reglas desplegadas siguen siendo las antiguas (`.read/.write: true` abiertas). En local con `?env=emul` el emulador ya evalúa las reglas nuevas. Para desplegar las endurecidas a prod:
 
@@ -240,9 +240,9 @@ Las reglas estrictas pueden **rechazar updates** sobre items preexistentes cuyo 
 
 ### Próximo nivel
 
-**Fase 1.A ya implementada** (commits `f7e327f`, `d5cec7d`, `ff37025`). Pendiente de tu lado: ejecutar `firebase-tools deploy --only database` y abrir `roadmap.md` §1.A.0 con los prerrequisitos de Firebase Console.
+**Fase 1.A cerrada** el 2026-07-13 (commits `f7e327f`, `d5cec7d`, `6c488d3`, `ff37025`, `193aaa6`, `3cbebb7`, `4211d5b`). Reglas desplegadas, E2E validado.
 
-Siguientes (§1.B–§1.D): perfiles, ajustes locales y familias (migración profunda de `/items/` a `/families/{familyId}/items/` con script de copia atómica per regla IA #11). Ver `roadmap.md`.
+Siguiente hito lógico: §1.D **Familias** — migración profunda de `/items/` a `/families/{familyId}/items/` con script de copia atómica (regla IA #11). Decisión clave de modelo de datos antes de codear (ownership, invitations, multi-membership). Ver `roadmap.md` §1.D y arrancar conversación con la IA.
 
 ---
 

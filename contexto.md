@@ -46,7 +46,7 @@ ShopMate/
 
 - **Frontend**: HTML5 + CSS3 + JavaScript (ES Modules, sin transpilar).
 - **Persistencia**: Firebase Realtime Database — proyecto `shopmate-e9195`.
-- **Auth**: Ninguna activa (uso compartido abierto). **Planeada** Fase 1.A: Firebase Authentication con email magic link (sin contraseñas). Ver `roadmap.md` → 1.A.
+- **Auth**: Activa desde Fase 1.A — Firebase Authentication con email magic link (passwordless, sin contraseñas). _Implementada y desplegada el 2026-07-13_ (commits `f7e327f` feat(auth) + `d5cec7d` chore(rules)). Las reglas RTDB endurecidas con `auth != null` están desplegadas a Firebase prod; el emulador local (`?env=emul`) usa las mismas reglas. Ver `roadmap.md` → 1.A.
 - **Build**: Ninguno en el código web (no hay `package.json` raíz, ni `node_modules` para bundlers). **Excepción planeada Fase 2.C:** subdir `android/` con Capacitor introduce build step aislado para empaquetar la webapp como APK instalable. Ver `roadmap.md` → 2.C.
 - **Fuentes**: Google Fonts — `Poppins` (body) y `Caveat` (lista).
 - **Despliegue**: extensión VS Code SFTP (.vscode/sftp.json), auto-upload al guardar.
@@ -153,7 +153,7 @@ Restauración recomendada: `git checkout 4f15c99 -- app.js main.css list.html`.
 3. 🟢 Los archivos locales están **vacíos** en HEAD pero **el código real vive en git** (commit `4f15c99`; restaurado a `index.html`/`app.js`/`main.css` reales tras `d4ecc06` gracias a los commits de la Fase 0).
 4. 🟢 La configuración Firebase está **externalizada**: `app.js` importa `firebaseConfig` desde `./firebase-config.js` (loader) que prioriza `firebase-config.local.js` (gitignored). Las claves reales NO viajan en el repo.
 5. 🟢 Existe una **integración SFTP** que sube al guardar — no incluir secretos en los archivos.
-6. 🟢 Las reglas RTDB están **endurecidas en `database.rules.json`** con `auth != null` (commit `d5cec7d`). Tienen validación de esquema (nombre, comprado, nota) en el `.validate` cascade. El cap de **500 items se enforza client-side** (`MAX_ITEMS` en `app.js`) porque el emulador RTDB v4.11 rechaza `newData.numChildren()`. La defensa-en-profundidad UX sigue siendo útil con auth (limita coste de quota de sign-ups).
+6. 🟢 Las reglas RTDB están **endurecidas en `database.rules.json`** con `auth != null` (commit `d5cec7d`) y **desplegadas a Firebase prod el 2026-07-13**. Tienen validación de esquema (nombre, comprado, nota) en el `.validate` cascade. El cap de **500 items se enforza client-side** (`MAX_ITEMS` en `app.js`) porque el emulador RTDB v4.11 rechaza `newData.numChildren()`. La defensa-en-profundidad UX sigue siendo útil con auth (limita coste de quota de sign-ups).
 7. 🟢 La IA debe leer además `instrucciones_ai.md` (reglas explícitas) y `roadmap.md` (plan futuro).
 8. 🟢 **Console logs**: `app.js` usa helper `log/warn/logerr` con prefijo de módulo. Para silenciarlos en local: `localStorage.setItem('shopmate:debug','0')`. Definido por regla activa #04.
 9. 🟢 **Aislamiento dev/prod**: ver `dev-isolation.txt` para no contaminar la lista familiar cuando se prueba en local.

@@ -14,13 +14,7 @@
 
 ## ✅ Fase 0 — Saneamiento inmediato (HECHO)
 
-> Cerrado en commits `64bfc09`, `e3c02f6`, `01b07af`, `dce3778`. Único pendiente externo para David:
->
-> ```bash
-> npx firebase-tools deploy --only database --project shopmate-e9195
-> ```
->
-> ( Publica `database.rules.json` endurecidas. Requiere login OAuth ).
+> Cerrado en commits `64bfc09`, `e3c02f6`, `01b07af`, `dce3778`, `d5cec7d` (rules). Las reglas endurecidas fueron desplegadas a Firebase prod el 2026-07-13 (verificado por David con su cuenta Owner).
 
 ### 0.A — Recuperación ✅
 
@@ -32,7 +26,7 @@
 
 - [x] `.gitignore` cubriendo `firebase-config.local.js`, `.env*`, claves SSH y rutas SFTP.
 - [x] Externalización de `firebaseConfig` → `firebase-config.{example,js,local.js}`.
-- [x] Reglas RTDB endurecidas en `database.rules.json` (pendiente de `firebase deploy`).
+- [x] Reglas RTDB endurecidas en `database.rules.json` (desplegadas a prod el 2026-07-13).
 
 ---
 
@@ -44,8 +38,8 @@
 
 > Estos pasos se ejecutan UNA vez desde Firebase Console con tu cuenta Google antes de poder usar el flujo de Email-link. Sin ellos, el código commiteado queda funcional pero el flujo end-to-end (envío real de emails a tu correo) NO arranca.
 
-- [ ] **Habilitar Email-link (passwordless)**: `Build > Authentication > Sign-in method > Email/Password` → activar el toggle **Email link (passwordless)**. Provider debe quedar Enabled.
-- [ ] **Authorized domains**: en la misma pestaña, sección **Authorized domains**:
+- [x] **Habilitar Email-link (passwordless)**: `Build > Authentication > Sign-in method > Email/Password` → activar el toggle **Email link (passwordless)**. Provider debe quedar Enabled. _Verificado 2026-07-13: E2E completo (envío de magic link a David OK)_.
+- [x] **Authorized domains**: en la misma pestaña, sección **Authorized domains**:
   - `localhost` — para desarrollo local (con `python -m http.server 8080`).
   - `158.179.223.22` — IP del servidor prod Ubuntu (o el dominio real que uses; Firebase maneja IPs pero muestra warning — un dominio propio es preferible; letsencrypt en §Seguridad).
   - `shopmate-e9195.firebaseapp.com` — ya viene por defecto.
@@ -60,13 +54,7 @@
 - [x] **Completar sign-in**: al clicar el enlace del correo, validar y guardar sesión local (`localStorage` con expiración 24h). _Misma sesión también persistida vía IndexedDB por Firebase (no requiere acción manual del usuario)._
 - [x] **Logout** desde cabecera (botón "Salir"). _Mismo commit `f7e327f`._
 
-> 🎯 **Estado actual de Fase 1.A**: código commiteado y endurecido. **Falta deploy manual de las rules por David**:
->
-> ```bash
-> npx firebase-tools login && npx firebase-tools deploy --only database --project shopmate-e9195
-> ```
->
-> Hasta que se despliegue, la app sigue funcionando con reglas abiertas pero el modal "Identifícate" ya bloquea el UI a usuarios no autenticados.
+> ✅ **Fase 1.A cerrada el 2026-07-13**. Commits commiteados + push a `origin/main` (`f7e327f` feat, `d5cec7d` rules, `6c488d3`+`ff37025`+`193aaa6`+`3cbebb7`+`4211d5b` docs/dev). Reglas endurecidas desplegadas a Firebase prod con la cuenta Owner correcta. E2E end-to-end validado (David recibió magic link → click → app autenticada → lista renderizada). NO hay pasos pendientes relativos a §1.A; las secciones §1.B, §1.C y §1.D siguen abiertas.
 
 ### 1.B — Perfiles de usuario
 
@@ -257,8 +245,8 @@
 
 | Hito | Alcance | Estado |
 |---|---|---|
-| **M0 — Rescate + seguridad** | Restaurar + `.gitignore` + claves seguras + reglas | ✅ HECHO (deploy RTDB pendiente manual) |
-| **M1 — Identidad** | Auth + perfiles + ajustes locales + familias | ⏳ **ACTIVAMENTE EN MARCHA** |
+| **M0 — Rescate + seguridad** | Restaurar + `.gitignore` + claves seguras + reglas | ✅ HECHO (deploy RTDB confirmado el 2026-07-13) |
+| **M1 — Identidad** | Auth + perfiles + ajustes locales + familias | 🟡 **EN MARCHA** (1.A cerrada 2026-07-13; §1.B, §1.C y §1.D pendientes) |
 | **M2 — Historial + PWA** | Snapshot en validar + manifest + SW + offline | ⬜ |
 | **M3 — App Android** | Capacitor wrapper + splash + icono + Play Store | ⬜ |
 | **M4 — Productividad** | Push, import, export, sugerencias, precios | ⬜ |
