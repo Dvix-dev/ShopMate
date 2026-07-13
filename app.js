@@ -601,7 +601,22 @@ async function completeSignInFromLink() {
 async function handleLogout() {
   log('[auth] handleLogout click');
   closeHamburger();
-  try { await signOut(auth); log('[auth] signOut OK'); clearStoredEmail(); }
+  try {
+    await signOut(auth);
+    log('[auth] signOut OK');
+    clearStoredEmail();
+    // Safety net post-logout (mobile 2026-07-13): si
+    // onAuthStateChanged no re-dispara con user=null en 1.5s
+    // (Firebase Auth lento en mobile tras signOut), forzamos
+    // la auth modal para que el usuario no se quede sin login
+    // tras un logout "invisible" (menu cierra pero modal no sale).
+    setTimeout(() => {
+      if (authModalEl && authModalEl.classList.contains('hidden')) {
+        logerr('[auth] onAuthStateChanged no disparo tras signOut, forzando auth modal');
+        showAuthView('form');
+      }
+    }, 1500);
+  }
   catch (err) { logerr('[auth] signOut ERROR', err); showAuthError('No pudimos cerrar sesion.'); }
 }
 if (authFormEl && authEmailEl) {
@@ -617,6 +632,8 @@ if (authCancelBtnEl) authCancelBtnEl.addEventListener('click', () => { clearStor
 if (logoutBtnEl) logoutBtnEl.addEventListener('click', handleLogout);
 if (menuLogoutBtnEl) menuLogoutBtnEl.addEventListener('click', handleLogout);
 onAuthStateChanged(auth, async user => {
+  authStateResolved = true;
+  clearTimeout(authFallbackTimer);
   // Try-catch global: si cualquier operacion dentro del callback falla
   // (e.g. isSignInWithEmailLink lanza, o un null reference), queremos
   // ASEGURARNOS de que la auth modal se muestra cuando el user es null.
@@ -658,6 +675,24 @@ if (window.location.search.includes('env=emul')) {
     warn('[firebase] Auth emulador NO envia emails reales — el link aparece en los logs');
   } catch (err) { logerr('[firebase] connect emulador ERROR', err); }
 }
+
+// ============================================================
+// Fallback safety net (mobile 2026-07-13)
+// Si Firebase Auth no se inicializa en 5s (red lenta, browser
+// issue en mobile, etc.), forzamos la auth modal para que el
+// usuario no se quede sin login. Se cancela automaticamente
+// cuando onAuthStateChanged dispara (callback mas abajo).
+// Si el usuario esta signed-in (Firebase lee sesion persistida
+// de IndexedDB), el callback dispara rapido, el timer se
+// cancela y la modal NO se muestra (correcto).
+// ============================================================
+let authStateResolved = false;
+const authFallbackTimer = setTimeout(() => {
+  if (!authStateResolved) {
+    logerr('[auth] onAuthStateChanged no disparo en 5s, forzando auth modal');
+    showAuthView('form');
+  }
+}, 5000);
 
 // ============================================================
 // Suscripciones RTDB gateadas por auth state
