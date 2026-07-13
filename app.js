@@ -204,9 +204,12 @@ async function validarComprados() {
     for (const { key, item } of toProcess) {
       try {
         const txResult = await runTransaction(ref(db, 'items/' + key), current => {
-          if (!current) return current;            // ya no existe, abort
-          if (!current.comprado) return current;   // alguien desmarcó, abort
-          return null;                              // delete
+          // En RTDB v9+ SOLO `return undefined` aborta la transaccion (committed=false).
+          // Retornar `current` (incluso si es null) cuenta como "no change" y
+          // commitea con committed=true — que era justo el bug del B1 anterior.
+          if (!current) return;            // abort: ya no existe
+          if (!current.comprado) return;   // abort: alguien desmarcó
+          return null;                     // commit: delete
         });
         if (txResult.committed) {
           const archived = { nombre: item.nombre };
