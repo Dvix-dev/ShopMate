@@ -14,10 +14,19 @@ const warn   = (...a) => { if (DEBUG) console.warn (...a); };
 const logerr = (...a) => {              console.error(...a); };
 
 // ============================================================
-// ENV detection (constante global segun el flag ?env=emul)
+// ENV detection (?env=emul + protocolo HTTP)
+// IS_EMULATOR: el user pidio modo emulador (via query string).
+// emulatorConnected: ademas, pudimos conectar DE VERDAD al
+// emulador local (protocolo HTTP, sin errores de connect).
+// Solo cuando ambos son effectively true auto-sign-in funciona.
+// En HTTPS (e.g. prod server con ?env=emul) IS_EMULATOR=true
+// pero emulatorConnected=false -> la app cae al flow de login
+// normal SIN tocar el emulador (que no funcionaria: connectAuthEmulator
+// rechaza HTTPS con auth/invalid-emulator-scheme por seguridad).
 // ============================================================
-const IS_EMULATOR = window.location.search.includes('env=emul');
-log('[env] IS_EMULATOR=', IS_EMULATOR);
+const IS_EMULATOR       = window.location.search.includes('env=emul');
+let   emulatorConnected = false;
+log('[env] IS_EMULATOR=', IS_EMULATOR, 'protocol=', window.location.protocol);
 
 // ============================================================
 // Firebase
@@ -687,20 +696,20 @@ onAuthStateChanged(auth, async user => {
       subscribeItems();
       subscribeCompras();
     } else {
-      log('[auth] signed-out', { isEmulator: IS_EMULATOR });
+      log('[auth] signed-out', { isEmulator: IS_EMULATOR, emulatorConnected });
       unsubscribeItems();
       unsubscribeCompras();
       if (menuProfileEmailEl) menuProfileEmailEl.textContent = '—';
       closeHamburger();
       hideAppContent();
-      // En emulador: auto-sign-in como "test" (anonimo + displayName=test)
-      // en lugar de mostrar la auth modal. Asi la app entra directamente
-      // sin email-link ni contrasena (es una cuenta anonima del emulador,
-      // no requiere password). Si ya existe sesion persistida en el
-      // emulador (--export-on-exit), onAuthStateChanged nunca dispara
-      // con null, asi que este codigo solo corre en arranque limpio o
-      // tras un signOut explicito.
-      if (IS_EMULATOR) {
+      // En emulador REAL (HTTP, conectados de verdad): auto-sign-in como
+      // "test" (anonimo + displayName=test) en lugar de mostrar la auth
+      // modal. Asi la app entra directamente sin email-link ni contrasena.
+      // Gateamos por emulatorConnected (NO IS_EMULATOR) para no intentar
+      // signInAnonymously si estamos en HTTPS+?env=emul: ahi el SDK rechazo
+      // connectAuthEmulator y signInAnonymously iria a prod (data leak
+      // risk / quota prod). Mejor caer al auth modal.
+      if (emulatorConnected) {
         const ok = await emulatorSignInTest();
         if (ok) return; // onAuthStateChanged re-disparara con user
       }
@@ -717,12 +726,23 @@ onAuthStateChanged(auth, async user => {
 // Emulador local (RTDB:9000 + Auth:9099)
 // ============================================================
 if (IS_EMULATOR) {
-  try {
-    connectDatabaseEmulator(db,   'localhost', 9000);
-    connectAuthEmulator   (auth, 'localhost', 9099);
-    log('[firebase] usando EMULADOR local (RTDB:9000 + Auth:9099)');
-    warn('[firebase] Auth emulador: auto-sign-in como "test" (anonimo, sin contrasena, sin email-link)');
-  } catch (err) { logerr('[firebase] connect emulador ERROR', err); }
+  // El emulador Auth requiere HTTP. Firebase SDK rechaza HTTPS con
+  // auth/invalid-emulator-scheme (mixed-content safety). Si el user
+  // abre ?env=emul en HTTPS (e.g. el server prod), NO conectamos al
+  // emulador (que no funcionaria) y dejamos que la app caiga al flow
+  // prod normal — no se rompe nada, solo aparece el auth modal con
+  // un warning en consola explicando que necesita HTTP local.
+  if (window.location.protocol !== 'http:') {
+    warn('[firebase] ?env=emul ignorado: el emulador requiere HTTP (estas en ' + window.location.protocol + '). Sirve la app con `python -m http.server 8080` y abre http://localhost:8080/?env=emul en vez del server prod.');
+  } else {
+    try {
+      connectDatabaseEmulator(db,   'localhost', 9000);
+      connectAuthEmulator   (auth, 'localhost', 9099);
+      emulatorConnected = true;
+      log('[firebase] usando EMULADOR local (RTDB:9000 + Auth:9099)');
+      warn('[firebase] Auth emulador: auto-sign-in como "test" (anonimo, sin contrasena, sin email-link)');
+    } catch (err) { logerr('[firebase] connect emulador ERROR', err); }
+  }
 }
 
 // ============================================================
@@ -738,12 +758,15 @@ if (IS_EMULATOR) {
 let authStateResolved = false;
 const authFallbackTimer = setTimeout(() => {
   if (!authStateResolved) {
-    // En emulador el auto-sign-in es asincrono (signInAnonymously +
+    // En emulador REAL el auto-sign-in es asincrono (signInAnonymously +
     // updateProfile) y puede tardar algo mas en arrancar (Firebase
     // Auth init). Si disparamos la auth modal aqui, rompemos el
     // flujo "entra directo". Dejamos que emulatorSignInTest()
     // resuelva el estado por si solo.
-    if (IS_EMULATOR) {
+    // Gateamos por emulatorConnected (no IS_EMULATOR): si estamos en
+    // HTTPS+?env=emul NO estamos conectados al emulador de verdad,
+    // y lanzar la auth modal es lo correcto (cae al flow prod normal).
+    if (emulatorConnected) {
       log('[emul] auth fallback 5s saltado (auto-sign-in asincrono en curso)');
       return;
     }

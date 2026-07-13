@@ -23,6 +23,17 @@
         connectDatabaseEmulator(db,   'localhost', 9000)
         connectAuthEmulator   (auth, 'localhost', 9099)
       No hace falta tocar nada en el codigo.
+   d) ⚠️ El emulador Auth SOLO funciona en HTTP (no HTTPS).
+      Firebase SDK rechaza `connectAuthEmulator` con
+      `auth/invalid-emulator-scheme` si la pagina esta en
+      HTTPS (server prod / dominios publicos / tuneles SSL).
+      Por seguridad, app.js detecta el protocolo y SOLO
+      conecta si `window.location.protocol === 'http:'`. Si
+      el flag `?env=emul` esta en HTTPS, la app ignora el
+      flag y cae al flow prod normal (con un warning en
+      consola). Para testear el emulador: `python -m http.server
+      8080` y abrir `http://localhost:8080/?env=emul`. NO abras
+      el server prod (`https://shopmate.com/?env=emul`).
 
 -------------------------------------------------------------
  1) ARRANCAR EL EMULADOR (UNA SOLA LINEA)
