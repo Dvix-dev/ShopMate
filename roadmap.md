@@ -40,13 +40,33 @@
 
 > Funcionalidades núcleo que requieren **Auth como fundación**. Hasta que Auth esté activo, la app sigue funcionando como "lista pública compartida" (modo actual).
 
+### 1.A.0 — Prerrequisitos en Firebase Console (David, manual, una sola vez)
+
+> Estos pasos se ejecutan UNA vez desde Firebase Console con tu cuenta Google antes de poder usar el flujo de Email-link. Sin ellos, el código commiteado queda funcional pero el flujo end-to-end (envío real de emails a tu correo) NO arranca.
+
+- [ ] **Habilitar Email-link (passwordless)**: `Build > Authentication > Sign-in method > Email/Password` → activar el toggle **Email link (passwordless)**. Provider debe quedar Enabled.
+- [ ] **Authorized domains**: en la misma pestaña, sección **Authorized domains**:
+  - `localhost` — para desarrollo local (con `python -m http.server 8080`).
+  - `158.179.223.22` — IP del servidor prod Ubuntu (o el dominio real que uses; Firebase maneja IPs pero muestra warning — un dominio propio es preferible; letsencrypt en §Seguridad).
+  - `shopmate-e9195.firebaseapp.com` — ya viene por defecto.
+- [ ] **(Opcional) Personalizar plantilla de email**: `Templates > Email link` → editar subject y cuerpo. **FROM sigue siendo `noreply@shopmate-e9195.firebaseapp.com`** (no personalizable sin plan Blaze).
+- [ ] **Quota**:Spark (gratis) tiene tope diario de emails. Si la familia dispara muchos `signInWithEmailLink`, puede saltar `auth/quota-exceeded`. Considerar Blaze si esto se vuelve problemático.
+
 ### 1.A — Autenticación (foundation)
 
-- [ ] **Activar Firebase Authentication** en Firebase Console → *Sign-in method* → **Email link (passwordless)**.
-- [ ] **Ajustar RTDB rules** para exigir `auth != null` (`.read`/`write` solo a usuarios autenticados). El item legacy `rules` en `database.rules.json` se actualiza con `auth != null` en lugar de `true` abierto.
-- [ ] **UI: pantalla Identifícate**: input email + botón "Enviar enlace". El enviar dispara `sendSignInLinkToEmail`.
-- [ ] **Completar sign-in**: al clicar el enlace del correo, validar y guardar sesión local (`localStorage` con expiración).
-- [ ] **Logout** desde cabecera.
+- [x] **Activar Firebase Authentication** en Firebase Console → *Sign-in method* → **Email link (passwordless)**. _Bloqueado por §1.A.0._
+- [x] **Ajustar RTDB rules** para exigir `auth != null` (`.read`/`write` solo a usuarios autenticados). El item legacy `rules` en `database.rules.json` se actualiza con `auth != null` en lugar de `true` abierto. _Commits: `f7e327f` feat(auth) + `d5cec7d` chore(rules)._
+- [x] **UI: pantalla Identifícate**: input email + botón "Enviar enlace". El enviar dispara `sendSignInLinkToEmail`. _Modal fullscreen bloqueante en commit `f7e327f`._
+- [x] **Completar sign-in**: al clicar el enlace del correo, validar y guardar sesión local (`localStorage` con expiración 24h). _Misma sesión también persistida vía IndexedDB por Firebase (no requiere acción manual del usuario)._
+- [x] **Logout** desde cabecera (botón "Salir"). _Mismo commit `f7e327f`._
+
+> 🎯 **Estado actual de Fase 1.A**: código commiteado y endurecido. **Falta deploy manual de las rules por David**:
+>
+> ```bash
+> npx firebase-tools login && npx firebase-tools deploy --only database --project shopmate-e9195
+> ```
+>
+> Hasta que se despliegue, la app sigue funcionando con reglas abiertas pero el modal "Identifícate" ya bloquea el UI a usuarios no autenticados.
 
 ### 1.B — Perfiles de usuario
 

@@ -68,6 +68,7 @@ mv list.html index.html
 - 🎨 **Diseño responsivo** con tipografías modernas (Poppins + Caveat).
 - 🌐 **Despliegue por SFTP** automático al guardar (VS Code).
 - 🔒 **Configuración externalizada**: las claves de Firebase NO viajan en el repo.
+- 🔐 **Identifícate (Fase 1.A)**: autenticación passwordless por email-link. Modal fullscreen bloqueante hasta completar el login (sin contraseñas — solo un click en el email). Sesión persistida automáticamente; botón "Salir" en cabecera.
 - 🐞 **Debug opcional**: `localStorage.setItem('shopmate:debug','0')` silencia los `console.log` de `app.js` (útil en producción).
 - 📝 **Notas en items**: añade `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa" (popup al pulsar el icono 📝).
 - 🧪 **Aislamiento dev/prod**: ver `dev-isolation.txt` para 3 caminos (emulador / proyecto Firebase paralelo / staging SFTP).
@@ -86,7 +87,7 @@ mv list.html index.html
 | Persistencia | Firebase Realtime Database |
 | Hosting | Servidor propio vía SFTP (`158.179.223.22`) |
 | Configuración | `firebase-config.local.js` gitignored + `.env.example` |
-| Autenticación | Firebase Authentication magic-link (planeada Fase 1.A, actualmente sin login) |
+| Autenticación | Firebase Authentication email-link magic-link (passwordless, **activa** desde Fase 1.A) |
 
 > No se usa ningún framework, bundler ni gestor de paquetes. Todo se ejecuta directamente en el navegador.
 
@@ -276,7 +277,7 @@ El despliegue está automatizado mediante la extensión **SFTP** de VS Code usan
    - Soporta notas opcionales: `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa".
 4. Cada producto aparece con un checkbox grande · pulsa para marcarlo como comprado.
 5. Cuando termines la compra, pulsa **Validar compra ✔** para borrar los productos ya comprados.
-6. Cualquier persona con la URL verá los cambios al instante.
+6. Cualquier persona **autenticada** verá los cambios al instante. Si abres la app sin sesión, el modal "Identifícate" bloquea el UI hasta enviar y pulsar el enlace del correo.
 
 ---
 
