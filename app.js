@@ -701,7 +701,19 @@ let unsubItems = null;
 function subscribeItems() {
   if (unsubItems) return;
   log('[firebase] subscribe /items');
-  unsubItems = onValue(ref(db, 'items'), renderLista, err => logerr('[firebase] onValue /items', err));
+  unsubItems = onValue(ref(db, 'items'), renderLista, err => {
+    logerr('[firebase] onValue /items', err);
+    // Root cause real del bug mobile (2026-07-13): si el token de
+    // Auth expira o se revoca, Firebase nos devuelve PERMISSION_DENIED
+    // en vez de re-disparar onAuthStateChanged con null (bug conocido
+    // del Firebase Auth client en mobile). La app se queda zombie:
+    // visible, sin datos, sin auth modal. Forzamos la auth modal
+    // aqui para que el usuario pueda re-autenticarse.
+    if (err && err.code === 'PERMISSION_DENIED') {
+      logerr('[auth] onValue /items PERMISSION_DENIED, forzando auth modal');
+      showAuthView('form');
+    }
+  });
 }
 function unsubscribeItems() {
   if (!unsubItems) return;
@@ -712,7 +724,13 @@ let unsubCompras = null;
 function subscribeCompras() {
   if (unsubCompras) return;
   log('[firebase] subscribe /shared/compras');
-  unsubCompras = onValue(ref(db, 'shared/compras'), renderHistory, err => logerr('[firebase] onValue /shared/compras', err));
+  unsubCompras = onValue(ref(db, 'shared/compras'), renderHistory, err => {
+    logerr('[firebase] onValue /shared/compras', err);
+    if (err && err.code === 'PERMISSION_DENIED') {
+      logerr('[auth] onValue /shared/compras PERMISSION_DENIED, forzando auth modal');
+      showAuthView('form');
+    }
+  });
 }
 function unsubscribeCompras() {
   if (!unsubCompras) return;
