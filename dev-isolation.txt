@@ -1,134 +1,148 @@
 =============================================================
- ShopMate · guia rapida de aislamiento DEV vs PRODUCCION
+ ShopMate · guia del emulador local (RTDB + Auth)
 =============================================================
- OBJETIVO: que lo que toques en pruebas/desarrollo no afecte
- a la base de datos real que usa tu familia.
+ OBJETIVO: tener un entorno local que replica Firebase Realtime
+ Database y Firebase Authentication (Email-link passwordless)
+ sin tocar los datos reales que usa tu familia ni la nube prod.
 
 -------------------------------------------------------------
- 1. EMULADOR LOCAL (recomendado, lo mas rapido)
+ 0) PRE-REQUISITOS (unico setup manual)
 -------------------------------------------------------------
-   a) Asegurate de tener Node (ya lo tienes: v22.14.0).
-   b) Levanta el emulador de RTDB. IMPORTANTE: escribe el comando
-      en UNA SOLA LINEA. El caracter `\` solo sirve de continuación
-      de linea en bash/zsh (incluye WSL, macOS, Linux y Git Bash en
-      Windows) — en PowerShell o cmd.exe NO funciona y rompe los
-      flags (`--project`, `--import=...`) porque el shell los
-      interpreta como operadores. La forma portable es una linea:
-
-        npx firebase-tools emulators:start --only database --project shopmate-e9195 --import=./emulator-data --export-on-exit
-
-      Alternativas validas:
-        - PowerShell con continuación (back-tick `` ` ``, NO barra):
-            npx firebase-tools emulators:start --only database `
-              --project shopmate-e9195 `
-              --import=./emulator-data --export-on-exit
-        - Instalación global para olvidarte de npx:
-            npm i -g firebase-tools
-            firebase emulators:start --only database --project shopmate-e9195 --import=./emulator-data --export-on-exit
-
-      Sobre `--import=./emulator-data`: la primera vez que lances el
-      emulador la carpeta aun no existira (o estara vacia) — firebase-
-      tools lo acepta y simplemente no importa nada. Si quieres
-      prepoblarla, basta con `mkdir -p ./emulator-data` (en Windows
-      nativo: `mkdir .\emulator-data`).
-
-      Se queda escuchando en http://localhost:9000
-      UI web para inspeccionar: http://localhost:4000
-
-      Nota: si tienes `.firebaserc` con el proyecto por defecto,
-      puedes omitir `--project shopmate-e9195`.
-
-   c) Para que la app use el emulador en vez de la nube,
-      anade esto al FINAL de app.js (antes de los eventos UI):
-        if (window.location.search.includes('env=emul')) {
-          const { connectDatabaseEmulator } = await import(
-            "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js"
-          );
-          connectDatabaseEmulator(db, 'localhost', 9000);
-          console.log('[firebase] usando EMULADOR local');
-        }
-
-   d) Sirve la app en local y abrela con el flag:
-        python -m http.server 8080
-        http://localhost:8080/?env=emul
-      Sin ese flag, conecta a la nube (produccion familiar).
-
-   Pros: gratis, instantaneo, datos aislados.
-   Contras: requiere linea de codigo en app.js (solo este archivo).
-
-   Nota sobre rules: si tu `database.rules.json` usa expresiones tipo
-   `newData.numChildren()` o `data.numChildren()`, el emulador RTDB
-   v4.11+ las rechaza con "No such method/property 'numChildren'"
-   (los métodos con prefijo newData.snapshot funcionan en produccion
-   pero la build del emulador a 2026-07 no los expone). Para evitar
-   el problema, el cap por numero de items se enforza en app.js
-   (`MAX_ITEMS`) y las reglas validan solo esquema (.validate
-   cascade: nombre, comprado, nota, hasChildren).   Si encuentras otra sintaxis con numChildren que el emulador
-   acepte, volvamos al cap server-side y borra el bloque cliente.
+   a) Node v22+ (ya lo tienes).
+   b) firebase.json debe tener el bloque "emulators" con
+      auth en :9099, database en :9000 y ui en :4000.
+      Sin este bloque firebase-tools arranca solo RTDB y avisa:
+        "!  auth: Not starting the auth emulator, make sure
+              you have run firebase init."
+      Puedes o bien:
+        - Editar firebase.json a mano (recomendado; ya está
+          hecho en el commit chore(dev) que añadió este archivo).
+        - O correr `npx firebase init emulators` y marcar
+          auth + database + ui.
+   c) En app.js la rama `?env=emul` ya conecta AMBOS emuladores:
+        connectDatabaseEmulator(db,   'localhost', 9000)
+        connectAuthEmulator   (auth, 'localhost', 9099)
+      No hace falta tocar nada en el código.
 
 -------------------------------------------------------------
- 2. PROYECTO FIREBASE PARALELO (cuando necesites nube real)
+ 1) ARRANCAR EL EMULADOR (UNA SOLA LINEA)
 -------------------------------------------------------------
-   a) Entra a https://console.firebase.google.com y crea un
-      proyecto NUEVO llamado: shopmate-dev-e9195
+   Desde la raiz del proyecto:
 
-   b) Dentro del proyecto dev, haz lo mismo que en produccion:
-      - Realtime Database > Create database > Start in test mode
-      - Authentication > Sign-in method > habilita Email link
-      - Project settings > Your apps > Web app > copia config
+     npx firebase-tools emulators:start --only auth,database --project shopmate-e9195 --import=./emulator-data --export-on-exit
 
-   c) Crea en este repo un archivo NUEVO:
-        cp firebase-config.example.js firebase-config.dev.local.js
-      Pegale los valores del proyecto dev (no del prod).
+   Notas:
+   - Una sola linea. El caracter \ sigue valiendo para
+     continuacion en bash/zsh (incluye Git Bash en Windows),
+     pero NO funciona en PowerShell o cmd.exe: lo interpretan
+     como operador. PowerShell usa back-tick ` para continuar.
+   - Sobre --import=./emulator-data: la primera vez la carpeta
+     no existe (firebase-tools la acepta vacia, simplemente no
+     importa nada). Para prepoblarla:
+       Windows nativo:  mkdir .\emulator-data
+       bash:            mkdir -p ./emulator-data
+   - Sobre --export-on-exit: al parar (Ctrl+C) exporta
+     ./emulator-data/database_export y ./emulator-data/
+     authentication_export. La siguiente vez --import los
+     restaura automaticamente.
+   - El UI queda en http://127.0.0.1:4000 y ahi puedes:
+       · ver items de /items/ en la pestaña Realtime Database
+       · ver usuarios Auth registrados + pending email-link
+       · editar/borrar datos a mano para tests
+   - Si en Windows el PATH no encuentra firebase-tools, asegurate
+     de tener internet y `npx` resolvera el paquete on-the-fly.
 
-   d) Para apuntar a dev desde la app:
-        if (window.location.search.includes('env=dev')) {
-          const { firebaseConfig: devCfg } = await import(
-            './firebase-config.dev.local.js'
-          );
-          const appDev = initializeApp(devCfg, 'dev');
-          const dbDev  = getDatabase(appDev);
-        }
+   Salida esperada (resumen, sin warnings de "auth not starting"):
 
-   Pros: datos en la nube pero sin tocar la familia.
-   Contras: configurar proyecto Firebase nuevo + duplicar reglas.
-
--------------------------------------------------------------
- 3. STAGING EN SERVIDOR (cuando quieras probar SIN afectar
-    al WebView de produccion desplegado)
--------------------------------------------------------------
-   a) Edita .vscode/sftp.json y anade un segundo "profile":
-        {
-          "name": "Dvix Server (STAGING)",
-          "host": "158.179.223.22",
-          "protocol": "sftp",
-          "port": 22,
-          "username": "ubuntu",
-          "privateKeyPath": "...",
-          "remotePath": "/var/www/html/shopmate-staging",
-          "uploadOnSave": true,
-          "ignore": [...]
-        }
-
-   b) Despliega con uploadOnSave a la carpeta staging
-      (/var/www/html/shopmate-staging), no a la de produccion.
-
-   c) Abre en navegador http://158.179.223.22/shopmate-staging/
-      o el dominio que uses.
-
-   Pros: prueba la pipeline real de SFTP sin ensuciar prod.
-   Contras: usa el mismo Firebase prod si no combinas con (2).
+     i  ui:       Starting Emulator Suite UI on 127.0.0.1:4000
+     i  auth:     Starting the Auth Emulator
+     i  database: Starting the Database Emulator
+     i  database: Importing data from .../emulator-data/database_export/...
+     ┌──────────┬────────────────┬────────────────────────────┐
+     │ Auth     │ 127.0.0.1:9099 │ http://127.0.0.1:4000/auth │
+     │ Database │ 127.0.0.1:9000 │ http://127.0.0.1:4000/database │
+     └──────────┴────────────────┴────────────────────────────┘
 
 -------------------------------------------------------------
- RECOMENDACION POR CASO
+ 2) USARLO CON LA APP
 -------------------------------------------------------------
-   Cambios visuales / UI pequenos       -> opcion 1 (emulador)
-   Pruebas de sync / RTDB logic          -> opcion 1 o 2 (dev)
-   Pruebas de flujo completo (Auth, etc) -> opcion 2 (dev)
-   Test del APK / WebView final          -> opcion 3 (staging)
+   En otra terminal, sirve la app:
 
-   En produccion, tu familia SIEMPRE usa la nube ORIGINAL
-   (shopmate-e9195) y por defecto la app conecta alli.
-   Cualquier ruta con ?env=... es solo para ti.
+     python -m http.server 8080
 
+   Y abre en el navegador la version con flag:
+
+     http://localhost:8080/?env=emul
+
+   - Sin ese flag, conecta a Firebase prod (nube familiar).
+   - En consola del navegador (DevTools) veras:
+       [firebase] usando EMULADOR local (RTDB:9000 + Auth:9099)
+       [auth] instancia inicializada
+   - El modal "Identificate" sale igual que en prod.
+   - Cualquier operacion contra RTDB o Auth va contra el
+     emulador local, sin tocar la nube.
+
+-------------------------------------------------------------
+ 3) PROBAR AUTH (email-link) EN LOCAL
+-------------------------------------------------------------
+   El emulador Auth NO envia emails reales. Para testear el
+   flujo end-to-end paso a paso:
+
+   3.1 En la app, escribe tu email y pulsa "Enviar enlace".
+       El modal cambia a "Revisa tu correo".
+   3.2 Abre el UI del emulador: http://127.0.0.1:4000/auth
+       En la pestana "Providers" veras la peticion pendiente.
+   3.3 En los logs de la terminal donde arrancaste el
+       emulador, busca una linea tipo:
+         "To complete signin, open http://127.0.0.1:8080/
+          ?apiKey=...&oobCode=...&mode=signIn"
+       Copia esa URL y pegala en el navegador.
+   3.4 La app detecta el link (isSignInWithEmailLink), valida
+       con signInWithEmailLink y entra con sesion iniciada.
+       [auth] signed-in uid=... email=...
+
+   Si reinicias el emulador SIN --import, los usuarios
+   pendientes y confirmados se pierden (es un emulador). Para
+   persistir entre sesiones, mantén --import + --export-on-exit.
+
+-------------------------------------------------------------
+ 4) PARA Y LIMPIA
+-------------------------------------------------------------
+   Ctrl+C en la terminal del emulador. --export-on-exit
+   persiste los datos automaticamente. Para borrar y empezar
+   desde cero:
+
+     rm -rf emulator-data/database_export emulator-data/authentication_export
+
+   Y vuelve a arrancar el emulador.
+
+-------------------------------------------------------------
+ 5) LIMITACIONES CONOCIDAS DEL EMULADOR
+-------------------------------------------------------------
+   - Email-link real no funciona: hay que copiar el link
+     manualmente desde el UI o desde los logs del emulador.
+   - El emulador RTDB evalua las mismas reglas que prod, pero
+     `newData.numChildren()` puede rechazarse en v4.11+. Por
+     eso MAX_ITEMS vive en app.js (defensa-en-profundidad),
+     no en rules. Si te topas con errores de este tipo, el
+     cap ya esta aplicado en el cliente.
+   - No testees password reset / OAuth providers aqui: el
+     emulador no los implementa sin configuracion extra.
+   - Las reglas endurecidas con `auth != null` aplican tambien
+     en el emulador. Para testear el flow end-to-end, primero
+     completa un sign-in via email-link (paso 3).
+
+-------------------------------------------------------------
+ RESUMEN DE PUERTOS
+-------------------------------------------------------------
+   UI Emulator Suite:   127.0.0.1:4000  (UI web de todo)
+   Auth Emulator:       127.0.0.1:9099  (sign-in por email-link)
+   Database Emulator:   127.0.0.1:9000  (RTDB shopmate-e9195)
+   Emulator Hub:        127.0.0.1:4400  (gestion interna)
+
+=============================================================
+ Cualquier cambio en esta guia debe revisarse tb en el
+ commit de Fase 1.A (f7e327f feat(auth)) que introduce el
+ flujo; si añades un emulador extra (functions, storage),
+ actualiza el bloque emulators en firebase.json + este doc.
 =============================================================
