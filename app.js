@@ -100,14 +100,6 @@ function renderLista(snapshot) {
 }
 
 // ============================================================
-// Sincronizacion RTDB
-// ============================================================
-onValue(ref(db, 'items'),
-  renderLista,
-  err => logerr('[firebase] onValue ERROR', err)
-);
-
-// ============================================================
 // Anadir item (modulo aislado)
 // ============================================================
 function addItem() {
@@ -186,6 +178,29 @@ function cerrarPopup() {
 // ambos sitios o mueve el onclick a app.js.
 
 // ============================================================
+// Base de datos isolada para testing
+// Bloque ejecutado ANTES del listener `onValue` para que el emulador
+// tome el control de RTDB antes de cualquier operacion (suscripcion,
+// push, update, remove). Ver dev-isolation.txt.
+// ============================================================
+if (window.location.search.includes('env=emul')) {
+  const { connectDatabaseEmulator } = await import(
+    "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js"
+  );
+  connectDatabaseEmulator(db, 'localhost', 9000);
+  log('[firebase] usando EMULADOR local');
+}
+
+// ============================================================
+// Sincronizacion RTDB
+// Suscrita DESPUES del bloque del emulador por la razón de arriba.
+// ============================================================
+onValue(ref(db, 'items'),
+  renderLista,
+  err => logerr('[firebase] onValue ERROR', err)
+);
+
+// ============================================================
 // Eventos UI
 // ============================================================
 addBtn    .addEventListener('click',  addItem);
@@ -217,4 +232,15 @@ document.addEventListener('keydown', e => {
 // ============================================================
 function procesarInput(input) {
   log('[processor] procesarInput', { input });
-  const match = input.match(/^(.+?
+  // Extraer nombre y nota (si existe)
+  // Formato esperado: "nombre (nota)" o "nombre"
+  const match = input.match(/^(.*?)\s*(?:\((.*)\))?$/);
+  if (!match) {
+    return { nombre: '', nota: '' };
+  }
+  
+  const nombre = match[1]?.trim() || '';
+  const nota = match[2]?.trim() || '';
+  
+  return { nombre, nota };
+}

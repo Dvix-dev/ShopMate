@@ -8,12 +8,35 @@
  1. EMULADOR LOCAL (recomendado, lo mas rapido)
 -------------------------------------------------------------
    a) Asegurate de tener Node (ya lo tienes: v22.14.0).
-   b) Levanta el emulador de RTDB:
-        npx firebase-tools emulators:start --only database \
-            --project shopmate-e9195 \
-            --import=./emulator-data --export-on-exit
+   b) Levanta el emulador de RTDB. IMPORTANTE: escribe el comando
+      en UNA SOLA LINEA. El caracter `\` solo sirve de continuación
+      de linea en bash/zsh (incluye WSL, macOS, Linux y Git Bash en
+      Windows) — en PowerShell o cmd.exe NO funciona y rompe los
+      flags (`--project`, `--import=...`) porque el shell los
+      interpreta como operadores. La forma portable es una linea:
+
+        npx firebase-tools emulators:start --only database --project shopmate-e9195 --import=./emulator-data --export-on-exit
+
+      Alternativas validas:
+        - PowerShell con continuación (back-tick `` ` ``, NO barra):
+            npx firebase-tools emulators:start --only database `
+              --project shopmate-e9195 `
+              --import=./emulator-data --export-on-exit
+        - Instalación global para olvidarte de npx:
+            npm i -g firebase-tools
+            firebase emulators:start --only database --project shopmate-e9195 --import=./emulator-data --export-on-exit
+
+      Sobre `--import=./emulator-data`: la primera vez que lances el
+      emulador la carpeta aun no existira (o estara vacia) — firebase-
+      tools lo acepta y simplemente no importa nada. Si quieres
+      prepoblarla, basta con `mkdir -p ./emulator-data` (en Windows
+      nativo: `mkdir .\emulator-data`).
+
       Se queda escuchando en http://localhost:9000
       UI web para inspeccionar: http://localhost:4000
+
+      Nota: si tienes `.firebaserc` con el proyecto por defecto,
+      puedes omitir `--project shopmate-e9195`.
 
    c) Para que la app use el emulador en vez de la nube,
       anade esto al FINAL de app.js (antes de los eventos UI):
