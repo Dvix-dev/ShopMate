@@ -19,10 +19,18 @@
           hecho en el commit chore(dev) que anadio este archivo).
         - O correr `npx firebase init emulators` y marcar
           auth + database + ui.
-   c) En app.js la rama `?env=emul` ya conecta AMBOS emuladores:
-        connectDatabaseEmulator(db,   'localhost', 9000)
-        connectAuthEmulator   (auth, 'localhost', 9099)
-      No hace falta tocar nada en el codigo.
+   c) En app.js la rama `?env=emul` ya conecta AMBOS emuladores.
+      OJO: las firmas son DISTINTAS entre Auth y RTDB:
+        connectDatabaseEmulator(db,    'localhost',   9000)
+          Firma (db, host, port). Host y port son parametros separados.
+        connectAuthEmulator   (auth,  'http://localhost:9099')
+          Firma (auth, url). URL COMPLETA con scheme 'http://'.
+          Si pasas solo 'localhost' (sin http:// prefix), el SDK
+          lanza auth/invalid-emulator-scheme — su regex interna
+          /^https?:\/\//.test(url) falla. NO es el mismo error que
+          el HTTP-only de prereq (d): este ocurre en CUALQUIER
+          protocolo (HTTP o HTTPS) si la URL no tiene scheme.
+      No hace falta tocar nada en el codigo (ya viene correcto).
    d) ⚠️ El emulador Auth SOLO funciona en HTTP (no HTTPS).
       Firebase SDK rechaza `connectAuthEmulator` con
       `auth/invalid-emulator-scheme` si la pagina esta en

@@ -736,8 +736,16 @@ if (IS_EMULATOR) {
     warn('[firebase] ?env=emul ignorado: el emulador requiere HTTP (estas en ' + window.location.protocol + '). Sirve la app con `python -m http.server 8080` y abre http://localhost:8080/?env=emul en vez del server prod.');
   } else {
     try {
-      connectDatabaseEmulator(db,   'localhost', 9000);
-      connectAuthEmulator   (auth, 'localhost', 9099);
+      // Firma RTDB: connectDatabaseEmulator(db, host, port). Host y port
+      // son parametros separados, OK.
+      // Firma Auth: connectAuthEmulator(auth, url). URL COMPLETA con
+      // scheme 'http://' (o 'https://' si lo sirvieras por SSL local).
+      // Pasar 'localhost' como segundo arg -> auth/invalid-emulator-scheme
+      // (la regex interna /^https?:\/\//.test(url) del SDK falla). Esto es
+      // independiente del HTTP-only check (item 16 contexto.md): ambos
+      // tienen que cumplirse.
+      connectDatabaseEmulator(db,   'localhost',   9000);
+      connectAuthEmulator   (auth,  'http://localhost:9099');
       emulatorConnected = true;
       log('[firebase] usando EMULADOR local (RTDB:9000 + Auth:9099)');
       warn('[firebase] Auth emulador: auto-sign-in como "test" (anonimo, sin contrasena, sin email-link)');
