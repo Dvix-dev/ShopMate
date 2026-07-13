@@ -1,7 +1,7 @@
 {
   "rules": {
     "items": {
-      ".read": true,
+      ".read": "auth != null",
       ".indexOn": ["comprado"],
 
       "$itemId": {
@@ -20,7 +20,7 @@
         }
       },
 
-      ".write": true
+      ".write": "auth != null"
     }
   }
 }
