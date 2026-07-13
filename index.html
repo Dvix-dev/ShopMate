@@ -38,18 +38,12 @@
 
   <div id="nota-popup" class="popup hidden">
     <div class="popup-content">
-      <div class="popup-close" onclick="cerrarPopup()">❌</div>
+      <div class="popup-close" id="popup-close">❌</div>
       <h3 id="popup-titulo"></h3>
       <p id="popup-nota"></p>
-      <!-- <button onclick="cerrarPopup()">Cerrar</button> -->
     </div>
   </div>
 
   <script type="module" src="app.js"></script>
-  <script>
-    function cerrarPopup() {
-      document.getElementById('nota-popup').classList.add('hidden');
-    }
-  </script>
 </body>
 </html>

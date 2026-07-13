@@ -35,11 +35,13 @@ const checklistEl = document.getElementById('checklist');
 const inputEl     = document.getElementById('item-input');
 const addBtn      = document.getElementById('add-btn');
 const validarBtn  = document.getElementById('validar-btn');
+const popupEl     = document.getElementById('nota-popup');
 log('[dom] refs OK', {
   checklistEl: !!checklistEl,
   inputEl: !!inputEl,
   addBtn: !!addBtn,
   validarBtn: !!validarBtn,
+  popupEl: !!popupEl,
 });
 
 // ============================================================
@@ -162,7 +164,6 @@ function validarComprados() {
 // ============================================================
 function mostrarNotaPopup(nombre, nota) {
   log('[popup] mostrarNotaPopup', { nombre, nota });
-  const popupEl   = document.getElementById('nota-popup');
   const tituloEl  = document.getElementById('popup-titulo');
   const notaTxtEl = document.getElementById('popup-nota');
 
@@ -177,13 +178,19 @@ function mostrarNotaPopup(nombre, nota) {
 
   tituloEl.textContent = nombre;
   notaTxtEl.textContent = nota;
-  popupEl.classList.remove('hidden');
-  log('[popup] shown');
+  // Diferimos el `remove('hidden')` al siguiente tick del event loop. Sin esto,
+  // el click que abrió el popup burbujea hasta `document` y el listener global
+  // "click fuera del card" lo cierra instantáneamente. Hacerlo async hace a
+  // `mostrarNotaPopup` self-contained: cualquier opener futuro (teclado,
+  // autocompletado, deep link...) queda blindado sin acordarse de stopPropagation.
+  setTimeout(() => {
+    popupEl.classList.remove('hidden');
+    log('[popup] shown');
+  }, 0);
 }
 
 function cerrarPopup() {
   log('[popup] cerrarPopup');
-  const popupEl = document.getElementById('nota-popup');
   if (!popupEl) {
     logerr('[popup] #nota-popup no existe en el DOM al cerrar');
     return;
@@ -191,9 +198,10 @@ function cerrarPopup() {
   popupEl.classList.add('hidden');
   log('[popup] hidden');
 }
-// Nota: index.html tiene un `cerrarPopup` inline para el onclick="cerrarPopup()".
-// Hace lo mismo (classList.add('hidden')). Si renombras la logica, actualiza
-// ambos sitios o mueve el onclick a app.js.
+// Antes esta funcion estaba duplicada inline en index.html (onclick +
+// <script> adicional). Movida la logica al 100% aqui (unica fuente de
+// verdad: regla #03). El boton X del popup se conecta via addEventListener
+// mas abajo, sin onclick en HTML.
 
 // ============================================================
 // Base de datos isolada para testing
@@ -224,7 +232,6 @@ validarBtn.addEventListener('click',  validarComprados);
 
 // Cerrar popup al pulsar fuera del card
 document.addEventListener('click', e => {
-  const popupEl = document.getElementById('nota-popup');
   if (!popupEl) return;
   if (popupEl.classList.contains('hidden')) return;
   if (!e.target.closest('.popup-content') && !e.target.closest('.popup-close')) {
@@ -234,13 +241,27 @@ document.addEventListener('click', e => {
 });
 // Cerrar popup con Escape
 document.addEventListener('keydown', e => {
-  const popupEl = document.getElementById('nota-popup');
   if (!popupEl) return;
   if (e.key === 'Escape' && !popupEl.classList.contains('hidden')) {
     log('[popup] Escape -> cerrar');
     popupEl.classList.add('hidden');
   }
 });
+
+// Botón X del popup — antes era `onclick="cerrarPopup()"` inline en el HTML.
+// Ahora conectado desde aquí para tener una única fuente de verdad (regla #03):
+// cualquier lógica futura (focus restoration, animación de cierre…) se aplica
+// sin sincronizar HTML y JS. Reentrada: ejecutar cerrarPopup con popup ya
+// cerrado es idempotente (classList.add no se duplica, solo registra en log).
+const popupCloseEl = document.getElementById('popup-close');
+if (popupCloseEl) {
+  popupCloseEl.addEventListener('click', () => {
+    log('[popup] click X -> cerrarPopup');
+    cerrarPopup();
+  });
+} else {
+  warn('[popup] no se encontró #popup-close — el botón X no cerrará el popup');
+}
 
 // ============================================================
 // Helpers
