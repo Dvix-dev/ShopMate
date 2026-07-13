@@ -20,7 +20,7 @@
         }
       },
 
-      ".write": "newData.numChildren() <= 500"
+      ".write": true
     }
   }
 }

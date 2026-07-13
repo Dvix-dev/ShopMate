@@ -196,8 +196,10 @@ Las reglas actuales del proyecto son abiertas (`.read: true, .write: true`). Est
 
 - ✅ Validación de esquema: cada item debe tener `nombre` (string no vacío, máx 80) y `comprado` (boolean).
 - ✅ `nota` opcional, string de hasta 500 caracteres.
-- ✅ Tope blando de 500 items en la colección para evitar abuso.
+- ✅ Tope blando de 500 items en la colección para evitar abuso (cap de **defensa-en-profundidad** enforzado en `app.js` como `MAX_ITEMS`; el cap server-side original con `newData.numChildren() <= 500` no se pudo activar porque el emulador RTDB v4.11 lo rechaza; la validación de esquema sigue siendo server-side y robusta).
 - ✅ Índice en `comprado` para queries eficientes.
+
+> 🛟 **Por qué `.write: true` y el cap se quedó en el cliente**: cuando llegue **Firebase Authentication** en Fase 1.A migramos a `auth != null`. Hasta entonces, la única defensa real era la validación de esquema (un atacante con cliente custom se saltaría cualquier cap server-side igualmente). Un cap client-side cubre el uso honesto y se documenta explícitamente como defensa-en-profundidad UX.
 
 ### Opción A — Desplegar con `firebase-tools` (CLI, recomendado)
 

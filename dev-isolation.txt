@@ -56,6 +56,17 @@
    Pros: gratis, instantaneo, datos aislados.
    Contras: requiere linea de codigo en app.js (solo este archivo).
 
+   Nota sobre rules: si tu `database.rules.json` usa expresiones tipo
+   `newData.numChildren()` o `data.numChildren()`, el emulador RTDB
+   v4.11+ las rechaza con "No such method/property 'numChildren'"
+   (los métodos con prefijo newData.snapshot funcionan en produccion
+   pero la build del emulador a 2026-07 no los expone). Para evitar
+   el problema, el cap por numero de items se enforza en app.js
+   (`MAX_ITEMS`) y las reglas validan solo esquema (.validate
+   cascade: nombre, comprado, nota, hasChildren). Si encuentras
+   otra sintaxis con numChildren que el emulador acepte, vivamos
+   el cap server-side otra vez y borra el bloque cliente.
+
 -------------------------------------------------------------
  2. PROYECTO FIREBASE PARALELO (cuando necesites nube real)
 -------------------------------------------------------------

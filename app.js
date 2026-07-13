@@ -43,6 +43,19 @@ log('[dom] refs OK', {
 });
 
 // ============================================================
+// Cap blando por colección (movido de rules.json por
+// incompatibilidad del emulador RTDB v4.11 con newData.numChildren()).
+// La validación de esquema (nombre, comprado, nota, hasChildren)
+// sigue endurecida en database.rules.json. Este cap es defensa-en-
+// profundidad de tipo UX: si el esquema pasa, este techo evita que
+// la lista se dispare. Un atacante con cliente custom se lo salta,
+// pero en Fase 1.A eso ya queda bloqueado por auth != null.
+// ============================================================
+const MAX_ITEMS = 500;
+let currentItemCount = 0;
+log('[cap] MAX_ITEMS', MAX_ITEMS);
+
+// ============================================================
 // Renderizado (modulo aislado)
 // ============================================================
 function renderLista(snapshot) {
@@ -96,7 +109,8 @@ function renderLista(snapshot) {
   });
 
   validarBtn.style.display = hayMarcados ? 'block' : 'none';
-  log('[render] hayMarcados', hayMarcados);
+  currentItemCount = snapshot.size;
+  log('[render] hayMarcados', hayMarcados, 'currentItemCount', currentItemCount);
 }
 
 // ============================================================
@@ -109,6 +123,10 @@ function addItem() {
   log('[add] parsed', { nombre, nota });
   if (!nombre) {
     warn('[add] nombre vacio, abort');
+    return;
+  }
+  if (currentItemCount >= MAX_ITEMS) {
+    warn('[add] cap MAX_ITEMS alcanzado -> abort', { currentItemCount, MAX_ITEMS });
     return;
   }
   const payload = { nombre, comprado: false, nota };
