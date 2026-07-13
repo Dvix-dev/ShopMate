@@ -72,6 +72,8 @@ mv list.html index.html
 - 🐞 **Debug opcional**: `localStorage.setItem('shopmate:debug','0')` silencia los `console.log` de `app.js` (útil en producción).
 - 📝 **Notas en items**: añade `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa" (popup al pulsar el icono 📝).
 - 🧪 **Aislamiento dev/prod**: `dev-isolation.txt` documenta el uso del emulador local (RTDB + Auth + UI) sin tocar la nube prod. Único camino soportado actualmente (los métodos "proyecto paralelo" y "staging SFTP" fueron retirados en commit `ff37025`).
+- 🍔 **Menú hamburguesa (Fase 2.A)**: drawer lateral con 4 secciones — Perfil (read-only), Ajustes (placeholder §1.C/§1.D), **Historial de compras** (acordeón con cada compra agrupada), y Cerrar sesión. Se abre con el botón ☰ de la cabecera; cierra con backdrop, Escape o click-fuera.
+- 📜 **Historial de compras (Fase 2.A, modo compat)**: cada "Validar compra" archiva los items marcados a `/shared/compras/{pushId}/{fecha, items}` y los borra de `/items/`. Las compras se ven agrupadas en acordeón (collapsed por defecto). Cap auto-trim a 20 compras (las más antiguas se borran). Cuando llegue §1.D Familias, los datos se migrarán a `/families/{fid}/compras/` con script atómico.
 
 > 📝 **Nota:** el proyecto aún **no es PWA completa** (sin `manifest.json` ni service worker); ese trabajo está planificado en `roadmap.md` → Fase 2. La versión inicial (`087a2fd`) sí guardaba en `localStorage` como fallback, pero la build Firebase actual no conserva esa capa offline.
 
@@ -314,6 +316,33 @@ Colección Firebase RTDB: **`items`**
 | `nombre` | string | Nombre del producto, máx 80 chars |
 | `comprado` | boolean | Estado: pendiente (`false`) o comprado (`true`) |
 | `nota` (opcional) | string | Nota libre hasta 500 chars |
+
+### Colección `/shared/compras` (Fase 2.A, modo compat hasta §1.D)
+
+```json
+{
+  "shared": {
+    "compras": {
+      "-Nx1": {
+        "fecha": 1752400000000,
+        "items": {
+          "-Nx1a": { "nombre": "Leche", "nota": "sin lactosa" },
+          "-Nx1b": { "nombre": "Pan" }
+        }
+      }
+    }
+  }
+}
+```
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `fecha` | number (ms) | `serverTimestamp()` del momento de Validar compra |
+| `items` | map | Items que estaban marcados, con sus keys originales preservados |
+| `items/{key}/nombre` | string | Copia del nombre al archivar (1..80 chars) |
+| `items/{key}/nota` | string? | Copia de la nota si existía (≤500 chars) |
+
+**Cap**: 20 compras máximo, auto-trim client-side (`trimCompras()` en `app.js`). Las más antiguas se eliminan al llegar al límite.
 
 ---
 

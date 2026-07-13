@@ -121,21 +121,13 @@
 
 ### 2.A — Historial de compras
 
-- [ ] **Mover items marcados a `/families/{familyId}/history/{ts-id}/`** al pulsar **Validar compra**:
-  ```
-  {
-    originalId: string,
-    nombre:     string,
-    nota:       string?,
-    addedBy:    uid,
-    addedAt:    timestamp,
-    boughtBy:   uid,
-    boughtAt:   timestamp
-  }
-  ```
-- [ ] **Pestaña "Historial"** (últimos 30 días / últimos 12 meses).
-- [ ] **"Productos frecuentes"** derivados del historial (count por nombre normalizado).
-- [ ] **Compatibilidad**: si no hay familia activa (modo shared), historial sigue escribiendo a `/shared/history/`.
+- [x] **Mover items marcados al pulsar Validar compra** (modo compat `/shared/compras/`): cada compra = `{ fecha, items: { [id]: { nombre, nota? } } }` con `serverTimestamp()` para evitar client clock-skew. _Implementado 2026-07-13. No incluye `addedBy/boughtBy` (uid/displayName) — diferido a §1.B Perfiles._
+- [x] **Historial visible en el menú hamburguesa** con compras agrupadas (acordeón con `<details>/<summary>`, collapsed por defecto).
+- [x] **Límite de 20 compras auto-trim** client-side: si el listener detecta `size > 20`, dispara `trimCompras()` que borra las más antiguas. Idempotente; race asumible en app familiar.
+- [x] **Compatibilidad**: escrito a `/shared/compras/` (mientras no exista §1.D Familias). Cuando aterrice §1.D, script atómico migra a `/families/{fid}/compras/` per regla IA #11.
+- [ ] **"Productos frecuentes"** (count por nombre normalizado) — pendiente.
+- [ ] **Filtro de tiempo** (7d/30d/90d) — pendiente.
+- [ ] **Authorship (addedBy/boughtBy)** — pendiente §1.B.
 
 ### 2.B — PWA completa
 
@@ -174,6 +166,15 @@
 - [ ] **Push notifications** vía `@capacitor/push-notifications` (integra con Fase 3).
 - [ ] **Deep links**: al pulsar un invite link desde email, abre la app directo a la familia.
 - [ ] **Publicar en Play Store** (proceso manual, asistencia de IA opcional).
+
+### 2.A.b — Menú hamburguesa (drawer estilizado)
+
+- [x] **Botón ☰ en cabecera** que abre drawer lateral con 4 secciones: Perfil / Ajustes / Historial / Cerrar sesión.
+- [x] **Backdrop + Escape + click-fuera** cierran el drawer; z-index 1500 (auth-modal 2000 sigue por encima, correcto).
+- [x] **Sección Perfil** (read-only): muestra el email autenticado.
+- [x] **Sección Ajustes** (placeholder): "Próximamente: tamaño de letra, tema y ajustes de familia" hasta que aterrice §1.C + §1.D.
+- [x] **Sección Cerrar sesión** movida desde el botón "Salir" del header al drawer.
+- [x] **Cierre de sesión cierra también el drawer** (en `handleLogout`).
 
 ### 2.D — Mejoras de UX
 

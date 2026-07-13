@@ -464,3 +464,248 @@ button:hover {
   .modal-card h3               { font-size: 1.25rem; }
   .user-info #user-email       { max-width: 120px; }
 }
+
+/* =============================================================
+ * HAMBURGER MENU (Fase 2.A - 2026-07-13)
+ * Drawer lateral estilizado con backdrop. Sustituye al botón
+ * "Salir" del header: el menu lateral reune Perfil / Ajustes /
+ * Historial / Cerrar sesion. Capas (z-index):
+ *   1499  backdrop
+ *   1500  drawer
+ *   2000  auth-modal  (sigue por encima, asi el modal fullscreen
+ *                      bloquea el menu si no hay sesion)
+ * Si David customiza los hex, este bloque debe actualizarse.
+ * ============================================================= */
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hamburger-btn {
+  background: transparent;
+  border: 1px solid #205746;
+  color: #205746;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1.25rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.hamburger-btn:hover {
+  background: #205746;
+  color: #fff;
+}
+.hamburger-btn[aria-expanded="true"] {
+  background: #205746;
+  color: #fff;
+  transform: rotate(90deg);
+}
+.hamburger-icon {
+  display: inline-block;
+  line-height: 1;
+}
+
+.hamburger-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 30, 28, 0.45);
+  z-index: 1499;
+  animation: fade-in 0.2s ease forwards;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+.hamburger-menu {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 320px;
+  max-width: 86vw;
+  height: 100dvh;
+  background: #ffffff;
+  color: #205746;
+  font-family: 'Poppins', sans-serif;
+  z-index: 1500;
+  padding: 1.25rem 1.25rem 2rem;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  transform: translateX(0);
+  transition: transform 0.25s ease;
+}
+.hamburger-menu.hidden {
+  display: block !important;  /* override .hidden; el transform lo oculta */
+  transform: translateX(110%);
+  pointer-events: none;
+  visibility: hidden;
+  transition: transform 0.25s ease, visibility 0s linear 0.25s;
+}
+
+.hamburger-menu-title {
+  margin: 0 0 1rem 0;
+  color: #35BDB2;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.hamburger-section {
+  margin: 0 0 1.25rem 0;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7e9;
+}
+.hamburger-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.hamburger-section-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #205746;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hamburger-profile-email {
+  margin: 0;
+  font-size: 1rem;
+  word-break: break-all;
+}
+.hamburger-profile-email span {
+  font-weight: 600;
+}
+
+.hamburger-section-placeholder,
+.hamburger-section-hint {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.85rem;
+  opacity: 0.7;
+  line-height: 1.45;
+}
+
+.hamburger-logout-btn {
+  background: transparent;
+  color: #205746;
+  border: 1px solid #205746;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease;
+  width: 100%;
+}
+.hamburger-logout-btn:hover {
+  background: #205746;
+  color: #fff;
+}
+
+/* =============================================================
+ * HISTORY VIEW - acordeon con <details>/<summary>
+ * Cada compra es un <details class="history-item">. El <summary>
+ * muestra la fecha formateada + el numero de items; el contenido
+ * es la lista de items.
+ * ============================================================= */
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.history-item {
+  background: #f7faf9;
+  border: 1px solid #d8e6e2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.history-item[open] {
+  background: #ecf7f4;
+}
+
+.history-item > summary {
+  cursor: pointer;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #205746;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+.history-item > summary::-webkit-details-marker { display: none; }
+.history-item > summary::after {
+  content: '▸';
+  font-size: 0.75rem;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+.history-item[open] > summary::after {
+  transform: rotate(90deg);
+}
+.history-item-meta {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+.history-item-date {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.history-item-count {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.history-item-content {
+  padding: 0.5rem 0.75rem 0.75rem;
+  border-top: 1px solid #d8e6e2;
+  font-family: 'Caveat', cursive;
+  font-size: 1.15rem;
+}
+
+.history-product {
+  padding: 0.2rem 0;
+  border-bottom: 1px dashed #d8e6e2;
+  color: #205746;
+}
+.history-product:last-child {
+  border-bottom: 0;
+}
+.history-product-name {
+  font-weight: 600;
+}
+.history-product-note {
+  display: block;
+  font-size: 0.9rem;
+  font-style: italic;
+  opacity: 0.7;
+  margin-left: 12px;
+}
+
+@media (max-width: 480px) {
+  .hamburger-menu { width: 88vw; padding: 1rem; }
+}

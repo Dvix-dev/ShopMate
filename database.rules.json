@@ -21,6 +21,38 @@
       },
 
       ".write": "auth != null"
+    },
+
+    "shared": {
+      "compras": {
+        ".read": "auth != null",
+
+        "$compraId": {
+          ".validate": "newData.hasChildren(['fecha', 'items'])",
+
+          "fecha": {
+            ".validate": "newData.isNumber() && newData.val() > 0"
+          },
+
+          "items": {
+            ".validate": "newData.hasChildren()",
+
+            "$itemKey": {
+              ".validate": "newData.hasChildren(['nombre'])",
+
+              "nombre": {
+                ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+              },
+
+              "nota": {
+                ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500)"
+              }
+            }
+          },
+
+          ".write": "auth != null"
+        }
+      }
     }
   }
 }

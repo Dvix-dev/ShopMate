@@ -102,7 +102,33 @@ Colección: **`items`**
 | `nombre` | string | Texto libre introducido por el usuario |
 | `comprado` | boolean | `false` por defecto; toggled al marcar checkbox |
 
-Reglas RTDB actuales (abiertas): `{ "items": { ".read": true, ".write": true } }`.
+Reglas RTDB endurecidas con `auth != null` para `/items/` y `/shared/compras/` (ver `database.rules.json`). Validación de esquema server-side en ambos paths.
+
+### Colección: `/shared/compras` (Fase 2.A, modo compat)
+
+Cada compra es un push-key con `{ fecha, items }`:
+
+```json
+{
+  "shared": {
+    "compras": {
+      "-Nx1": {
+        "fecha": 1752400000000,
+        "items": {
+          "-Nx1a": { "nombre": "Leche",  "nota": "sin lactosa" },
+          "-Nx1b": { "nombre": "Pan" },
+          "-Nx1c": { "nombre": "Huevos" }
+        }
+      }
+    }
+  }
+}
+```
+
+- `fecha`: `serverTimestamp()` (ms epoch).
+- `items`: los keys originales de `/items/` (preservados para trazabilidad post-mortem).
+- Cap client-side: **20 compras**, las más antiguas se borran auto al llegar al límite (`trimCompras()`).
+- Cuando aterrice §1.D Familias, este path se migra atómicamente a `/families/{fid}/compras/` per regla IA #11.
 
 ---
 
@@ -157,6 +183,7 @@ Restauración recomendada: `git checkout 4f15c99 -- app.js main.css list.html`.
 7. 🟢 La IA debe leer además `instrucciones_ai.md` (reglas explícitas) y `roadmap.md` (plan futuro).
 8. 🟢 **Console logs**: `app.js` usa helper `log/warn/logerr` con prefijo de módulo. Para silenciarlos en local: `localStorage.setItem('shopmate:debug','0')`. Definido por regla activa #04.
 9. 🟢 **Aislamiento dev/prod**: ver `dev-isolation.txt` para no contaminar la lista familiar cuando se prueba en local.
+10. 🟢 **Historial (Fase 2.A)**: cada "Validar compra" archiva los items marcados a `/shared/compras/{pushId}/{fecha,items}` y los borra de `/items/`. El drawer lateral (menú ☰) los renderiza como acordeón con `<details>/<summary>`, ordenados por fecha desc. Cap **20 compras** auto-trim client-side. No incluye authorship (uid/displayName) — diferido a §1.B Perfiles.
 
 ---
 

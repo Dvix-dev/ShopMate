@@ -18,7 +18,7 @@ const logerr = (...a) => {              console.error(...a); };
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
-import { getDatabase, ref, onValue, push, update, remove, connectDatabaseEmulator } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+import { getDatabase, ref, onValue, push, update, remove, get, set, serverTimestamp, connectDatabaseEmulator } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
 import {
   getAuth, onAuthStateChanged,
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
@@ -53,36 +53,43 @@ const authErrorEl     = document.getElementById('auth-error');
 const authMessageEl   = document.getElementById('auth-message');
 const userInfoEl      = document.getElementById('user-info');
 const userEmailEl     = document.getElementById('user-email');
+// El boton logout del header ya no existe (commit refactor). El drawer
+// lateral lo reemplaza. La referencia legacy se ignora si el nodo
+// no esta presente en el DOM (defensa para tests de regresion).
 const logoutBtnEl     = document.getElementById('logout-btn');
+// Drawer / hamburger / history
+const hamburgerBtnEl     = document.getElementById('hamburger-btn');
+const hamburgerMenuEl    = document.getElementById('hamburger-menu');
+const hamburgerBackdropEl = document.getElementById('hamburger-backdrop');
+const menuProfileEmailEl = document.getElementById('menu-profile-email');
+const menuLogoutBtnEl    = document.getElementById('menu-logout-btn');
+const historyListEl      = document.getElementById('history-list');
+const historyEmptyEl     = document.getElementById('history-empty');
 log('[dom] refs OK', {
   checklistEl: !!checklistEl,
   inputEl: !!inputEl,
   addBtn: !!addBtn,
   validarBtn: !!validarBtn,
-  popupEl: !!popupEl,
-  appContentEl: !!appContentEl,
-  authModalEl: !!authModalEl,
-  authFormEl: !!authFormEl,
-  authEmailEl: !!authEmailEl,
-  userInfoEl: !!userInfoEl,
-  logoutBtnEl: !!logoutBtnEl,
+  hamburgerBtnEl: !!hamburgerBtnEl,
+  hamburgerMenuEl: !!hamburgerMenuEl,
+  historyListEl: !!historyListEl,
 });
 
 // ============================================================
-// Cap blando por colección (movido de rules.json por
-// incompatibilidad del emulador RTDB v4.11 con newData.numChildren()).
-// La validación de esquema (nombre, comprado, nota, hasChildren)
-// sigue endurecida en database.rules.json. Este cap es defensa-en-
-// profundidad de tipo UX: si el esquema pasa, este techo evita que
-// la lista se dispare. Un atacante con cliente custom se lo salta,
-// pero en Fase 1.A eso ya queda bloqueado por auth != null.
+// Cap blando por colección
+// items: 500 (defensa-en-profundidad UX).
+// compras: 20 (limite auto-trim para ahorrar almacenamiento).
+// Ambos enforzados client-side porque el emulador RTDB v4.11
+// rechaza `newData.numChildren()`. La validación de esquema
+// sigue endurecida en database.rules.json (server-side).
 // ============================================================
-const MAX_ITEMS = 500;
+const MAX_ITEMS   = 500;
+const MAX_COMPRAS = 20;
 let currentItemCount = 0;
-log('[cap] MAX_ITEMS', MAX_ITEMS);
+log('[cap] MAX_ITEMS', MAX_ITEMS, 'MAX_COMPRAS', MAX_COMPRAS);
 
 // ============================================================
-// Renderizado (modulo aislado)
+// Renderizado de la lista activa
 // ============================================================
 function renderLista(snapshot) {
   log('[render] snapshot recibido, hijos:', snapshot.size);
@@ -140,7 +147,7 @@ function renderLista(snapshot) {
 }
 
 // ============================================================
-// Anadir item (modulo aislado)
+// Anadir item
 // ============================================================
 function addItem() {
   if (!requireAuth('addItem')) return;
@@ -166,208 +173,265 @@ function addItem() {
 }
 
 // ============================================================
-// Validar y eliminar marcados (modulo aislado)
+
 // ============================================================
-function validarComprados() {
+// Validar compra: archiva los items marcados en /shared/compras/
+// y luego los elimina de /items/. El archivado es atomico (un solo
+// set() con la compra completa). El trim a 20 lo dispara el listener
+// de /shared/compras/ al detectar size > MAX_COMPRAS.
+// ============================================================
+async function validarComprados() {
   if (!requireAuth('validarComprados')) return;
   log('[validator] click');
-  onValue(ref(db, 'items'), snapshot => {
-    const toRemove = [];
+  try {
+    const snapshot = await get(ref(db, 'items'));
+    const itemsToArchive = {};
+    const keysToRemove = [];
     snapshot.forEach(childSnapshot => {
-      if (childSnapshot.val().comprado) toRemove.push(childSnapshot.key);
+      const item = childSnapshot.val();
+      if (item && item.comprado) {
+        keysToRemove.push(childSnapshot.key);
+        const archived = { nombre: item.nombre };
+        if (item.nota) archived.nota = item.nota;
+        itemsToArchive[childSnapshot.key] = archived;
+      }
     });
-    log('[validator] marcados a eliminar', toRemove);
-    toRemove.forEach(k => {
-      remove(ref(db, 'items/' + k))
-        .then(() => log('[validator] removed', k))
-        .catch(err => logerr('[validator] remove ERROR', k, err));
-    });
-  }, { onlyOnce: true });
+    log('[validator] items a archivar', keysToRemove.length);
+    if (keysToRemove.length === 0) { log('[validator] no hay marcados'); return; }
+    const newCompraRef = push(ref(db, 'shared/compras'));
+    log('[validator] creando compra', newCompraRef.key);
+    await set(newCompraRef, { fecha: serverTimestamp(), items: itemsToArchive });
+    log('[validator] compra creada OK, eliminando items');
+    const updates = {};
+    keysToRemove.forEach(k => { updates['items/' + k] = null; });
+    await update(ref(db), updates);
+    log('[validator] items eliminados OK', keysToRemove.length);
+  } catch (err) { logerr('[validator] ERROR', err); }
 }
 
 // ============================================================
-// Popup de notas (modulo aislado con aislamiento de errores)
+// trimCompras: si hay mas de MAX_COMPRAS, borra las mas antiguas.
+// Las push keys de Firebase son time-ordered. Tomamos las primeras
+// `excess` del snapshot (las mas antiguas) y las eliminamos via
+// update con `null` (delete en RTDB multi-path).
+// ============================================================
+async function trimCompras() {
+  try {
+    const snapshot = await get(ref(db, 'shared/compras'));
+    const count = snapshot.size;
+    if (count <= MAX_COMPRAS) { log('[trim] no trim'); return; }
+    const excess = count - MAX_COMPRAS;
+    const oldestKeys = [];
+    let i = 0;
+    snapshot.forEach(childSnapshot => {
+      if (i < excess) oldestKeys.push(childSnapshot.key);
+      i++;
+    });
+    log('[trim] eliminando los', excess, 'mas antiguos:', oldestKeys);
+    const updates = {};
+    oldestKeys.forEach(k => { updates['shared/compras/' + k] = null; });
+    await update(ref(db), updates);
+    log('[trim] OK');
+  } catch (err) { logerr('[trim] ERROR', err); }
+}
+
+// ============================================================
+// Render del historial (dentro del drawer)
+// Cada compra es un <details class="history-item"> con:
+//   - <summary>: fecha formateada + contador
+//   - <div class="history-item-content">: lista de items
+// Push keys son time-ordered. Invertimos para most recent-first.
+// Si size > MAX_COMPRAS disparamos trimCompras().
+// ============================================================
+function renderHistory(snapshot) {
+  log('[history] render', snapshot.size);
+  if (!historyListEl) return;
+  Array.from(historyListEl.children).forEach(child => {
+    if (child !== historyEmptyEl) child.remove();
+  });
+  if (snapshot.size === 0) {
+    if (historyEmptyEl) historyEmptyEl.classList.remove('hidden');
+    return;
+  }
+  if (historyEmptyEl) historyEmptyEl.classList.add('hidden');
+  const compras = [];
+  snapshot.forEach(childSnapshot => {
+    compras.push({ key: childSnapshot.key, val: childSnapshot.val() });
+  });
+  compras.reverse();
+  compras.forEach(({ key, val }) => {
+    const details = document.createElement('details');
+    details.classList.add('history-item');
+    details.dataset.compraKey = key;
+    const summary = document.createElement('summary');
+    const meta = document.createElement('span');
+    meta.classList.add('history-item-meta');
+    const date = document.createElement('span');
+    date.classList.add('history-item-date');
+    date.textContent = formatCompraDate(val && val.fecha);
+    const count = document.createElement('span');
+    count.classList.add('history-item-count');
+    const itemCount = (val && val.items) ? Object.keys(val.items).length : 0;
+    count.textContent = itemCount + ' producto' + (itemCount !== 1 ? 's' : '');
+    meta.appendChild(date);
+    meta.appendChild(count);
+    summary.appendChild(meta);
+    details.appendChild(summary);
+    if (val && val.items) {
+      const content = document.createElement('div');
+      content.classList.add('history-item-content');
+      Object.values(val.items).forEach(item => {
+        if (!item || !item.nombre) return;
+        const product = document.createElement('div');
+        product.classList.add('history-product');
+        const name = document.createElement('span');
+        name.classList.add('history-product-name');
+        name.textContent = item.nombre;
+        product.appendChild(name);
+        if (item.nota) {
+          const note = document.createElement('span');
+          note.classList.add('history-product-note');
+          note.textContent = '— ' + item.nota;
+          product.appendChild(note);
+        }
+        content.appendChild(product);
+      });
+      details.appendChild(content);
+    }
+    historyListEl.appendChild(details);
+  });
+  if (snapshot.size > MAX_COMPRAS) {
+    log('[history] size > MAX_COMPRAS -> trim');
+    trimCompras();
+  }
+}
+
+function formatCompraDate(ms) {
+  if (!ms || typeof ms !== 'number' || ms < 1000000000000) return 'Fecha desconocida';
+  try {
+    return new Intl.DateTimeFormat('es-ES', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }).format(new Date(ms));
+  } catch (_e) { return new Date(ms).toLocaleString(); }
+}
+
+// ============================================================
+// Popup de notas
 // ============================================================
 function mostrarNotaPopup(nombre, nota) {
   log('[popup] mostrarNotaPopup', { nombre, nota });
   const tituloEl  = document.getElementById('popup-titulo');
   const notaTxtEl = document.getElementById('popup-nota');
-
-  if (!popupEl) {
-    logerr('[popup] #nota-popup no existe en el DOM — el HTML no tiene el contenedor');
-    return;
-  }
-  if (!tituloEl || !notaTxtEl) {
-    logerr('[popup] faltan nodos internos (#popup-titulo o #popup-nota)');
-    return;
-  }
-
+  if (!popupEl) { logerr('[popup] #nota-popup no existe en el DOM'); return; }
+  if (!tituloEl || !notaTxtEl) { logerr('[popup] faltan nodos internos'); return; }
   tituloEl.textContent = nombre;
   notaTxtEl.textContent = nota;
-  // Diferimos el `remove('hidden')` al siguiente tick del event loop. Sin esto,
-  // el click que abrió el popup burbujea hasta `document` y el listener global
-  // "click fuera del card" lo cierra instantáneamente. Hacerlo async hace a
-  // `mostrarNotaPopup` self-contained: cualquier opener futuro (teclado,
-  // autocompletado, deep link...) queda blindado sin acordarse de stopPropagation.
-  setTimeout(() => {
-    popupEl.classList.remove('hidden');
-    log('[popup] shown');
-  }, 0);
+  setTimeout(() => { popupEl.classList.remove('hidden'); log('[popup] shown'); }, 0);
 }
-
 function cerrarPopup() {
   log('[popup] cerrarPopup');
-  if (!popupEl) {
-    logerr('[popup] #nota-popup no existe en el DOM al cerrar');
-    return;
-  }
+  if (!popupEl) { logerr('[popup] #nota-popup no existe al cerrar'); return; }
   popupEl.classList.add('hidden');
   log('[popup] hidden');
 }
-// Antes esta funcion estaba duplicada inline en index.html (onclick +
-// <script> adicional). Movida la logica al 100% aqui (unica fuente de
-// verdad: regla #03). El boton X del popup se conecta via addEventListener
-// mas abajo, sin onclick en HTML.
+
+// ============================================================
+// Hamburger / drawer
+// ============================================================
+function openHamburger() {
+  if (!hamburgerMenuEl || !hamburgerBackdropEl || !hamburgerBtnEl) return;
+  hamburgerMenuEl.classList.remove('hidden');
+  hamburgerBackdropEl.classList.remove('hidden');
+  hamburgerBtnEl.setAttribute('aria-expanded', 'true');
+  log('[hamburger] open');
+}
+function closeHamburger() {
+  if (!hamburgerMenuEl || !hamburgerBackdropEl || !hamburgerBtnEl) return;
+  hamburgerMenuEl.classList.add('hidden');
+  hamburgerBackdropEl.classList.add('hidden');
+  hamburgerBtnEl.setAttribute('aria-expanded', 'false');
+  log('[hamburger] close');
+}
+function toggleHamburger() {
+  if (!hamburgerMenuEl) return;
+  if (hamburgerMenuEl.classList.contains('hidden')) openHamburger();
+  else closeHamburger();
+}
 
 // ============================================================
 // Auth (Fase 1.A)
-// Flujo: email-link magic-link (passwordless). onAuthStateChanged
-// es la fuente de verdad: si hay user → ocultar modal, mostrar
-// #app-content, suscribirse a /items, pintar email en cabecera.
-// Si no hay user → ocultar #app-content, mostrar modal, y detectar
-// si el navegador viene del email-link para completar el login.
 // ============================================================
 const AUTH_STORAGE_EMAIL = 'shopmate:auth:email';
-const AUTH_MAX_AGE_MS    = 24 * 60 * 60 * 1000; // 24h
-
+const AUTH_MAX_AGE_MS    = 24 * 60 * 60 * 1000;
 function actionCodeSettings() {
-  // Mismo origen donde está montada la app. handleCodeInApp=true
-  // es OBLIGATORIO para que Firebase gestione el link dentro de la
-  // app en lugar de saltar a la web de cuentas de Google.
-  // La URL debe estar en Authorized domains en Firebase Console.
-  return {
-    url: window.location.origin + window.location.pathname,
-    handleCodeInApp: true,
-  };
+  return { url: window.location.origin + window.location.pathname, handleCodeInApp: true };
 }
-
 const AUTH_ERROR_MAP = {
-  'auth/invalid-email':          'Email no válido. Revísalo e inténtalo de nuevo.',
+  'auth/invalid-email':          'Email no valido. Revisalo e intentalo de nuevo.',
   'auth/missing-email':          'Introduce tu email.',
-  'auth/quota-exceeded':         'Has superado la cuota de envíos. Inténtalo más tarde.',
-  'auth/network-request-failed': 'Error de red. Comprueba tu conexión.',
-  'auth/missing-continue-uri':   'Config: añade este dominio a Authorized domains en Firebase Console.',
-  'auth/unauthorized-continue-uri': 'Config: la URL de retorno no está autorizada.',
-  'auth/invalid-action-code':    'El enlace ha expirado o ya se usó. Vuelve a pedir uno.',
+  'auth/quota-exceeded':         'Has superado la cuota de envios. Intentalo mas tarde.',
+  'auth/network-request-failed': 'Error de red. Comprueba tu conexion.',
+  'auth/missing-continue-uri':   'Config: anade este dominio a Authorized domains.',
+  'auth/unauthorized-continue-uri': 'Config: la URL de retorno no esta autorizada.',
+  'auth/invalid-action-code':    'El enlace ha expirado o ya se uso. Vuelve a pedir uno.',
   'auth/expired-action-code':    'El enlace ha expirado. Vuelve a pedir uno.',
 };
-
-function authErrorMessage(code) {
-  return AUTH_ERROR_MAP[code] || `Error desconocido (${code}). Mira la consola.`;
-}
-
-// requireAuth: guard para acciones que tocan RTDB.
-// Antes de endurecer las RTDB rules (commit 2, auth != null) las
-// acciones funcionaban sin auth; tras endurecerlas, addItem y
-// validarComprados fallarían con PERMISSION_DENIED si el usuario
-// no está logueado. Esta función centraliza la verificación y
-// deja un log claro de quién intentó qué sin sesión.
-function requireAuth(label = 'acción') {
-  if (!auth || !auth.currentUser) {
-    warn('[auth] acción bloqueada (sin user):', label);
-    return false;
-  }
+function authErrorMessage(code) { return AUTH_ERROR_MAP[code] || ('Error desconocido (' + code + ').'); }
+function requireAuth(label) {
+  if (!auth || !auth.currentUser) { warn('[auth] accion bloqueada (sin user):', label); return false; }
   return true;
 }
-
-function showAuthView(state, opts = {}) {
+function showAuthView(state, opts) {
   if (!authModalEl || !authFormEl) return;
   log('[auth] showAuthView', state, opts);
   authFormEl.classList.remove('hidden');
-  if (authErrorEl)   { authErrorEl.classList.add('hidden');   authErrorEl.textContent = ''; }
+  if (authErrorEl) { authErrorEl.classList.add('hidden'); authErrorEl.textContent = ''; }
   if (authMessageEl) authMessageEl.classList.add('hidden');
   if (authCancelBtnEl) authCancelBtnEl.classList.add('hidden');
-
-  switch (state) {
-    case 'form':
-      if (authEmailEl) {
-        authEmailEl.value = opts.email || '';
-        authEmailEl.focus();
-      }
-      break;
-    case 'sent':
-      authFormEl.classList.add('hidden');
-      if (authCancelBtnEl) authCancelBtnEl.classList.remove('hidden');
-      if (authMessageEl) {
-        authMessageEl.classList.remove('hidden');
-        authMessageEl.textContent = `Hemos enviado un enlace a ${opts.email}. Ábrelo desde este dispositivo para entrar.`;
-      }
-      break;
-    case 'completing':
-      authFormEl.classList.add('hidden');
-      if (authMessageEl) {
-        authMessageEl.classList.remove('hidden');
-        authMessageEl.textContent = 'Completando acceso...';
-      }
-      break;
+  if (state === 'form') {
+    if (authEmailEl) { authEmailEl.value = (opts && opts.email) || ''; authEmailEl.focus(); }
+  } else if (state === 'sent') {
+    authFormEl.classList.add('hidden');
+    if (authCancelBtnEl) authCancelBtnEl.classList.remove('hidden');
+    if (authMessageEl) {
+      authMessageEl.classList.remove('hidden');
+      authMessageEl.textContent = 'Hemos enviado un enlace a ' + (opts && opts.email) + '. Abrelo desde este dispositivo para entrar.';
+    }
+  } else if (state === 'completing') {
+    authFormEl.classList.add('hidden');
+    if (authMessageEl) {
+      authMessageEl.classList.remove('hidden');
+      authMessageEl.textContent = 'Completando acceso...';
+    }
   }
   authModalEl.classList.remove('hidden');
 }
-
-function hideAuthModal() {
-  if (!authModalEl) return;
-  authModalEl.classList.add('hidden');
-  log('[auth] modal oculto');
-}
-
+function hideAuthModal() { if (authModalEl) authModalEl.classList.add('hidden'); }
 function showAppContent() {
   if (appContentEl) { appContentEl.classList.remove('hidden'); appContentEl.style.display = ''; }
-  if (userInfoEl)    userInfoEl.classList.remove('hidden');
-  log('[auth] appContent + user-info visibles');
+  if (userInfoEl) userInfoEl.classList.remove('hidden');
 }
-
 function hideAppContent() {
   if (appContentEl) { appContentEl.classList.add('hidden'); appContentEl.style.display = 'none'; }
-  if (userInfoEl)    userInfoEl.classList.add('hidden');
-  log('[auth] appContent + user-info ocultos');
+  if (userInfoEl) userInfoEl.classList.add('hidden');
 }
-
 function showAuthError(message) {
-  if (!authErrorEl) {
-    logerr('[auth] no se puede mostrar error visible, #auth-error falta', message);
-    return;
-  }
-  authErrorEl.textContent = message;
-  authErrorEl.classList.remove('hidden');
+  if (!authErrorEl) { logerr('[auth] no #auth-error', message); return; }
+  authErrorEl.textContent = message; authErrorEl.classList.remove('hidden');
 }
-
 function readStoredEmail() {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_EMAIL);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || !parsed.email || !parsed.ts) return null;
-    if (Date.now() - parsed.ts > AUTH_MAX_AGE_MS) {
-      warn('[auth] email persistido expirado (>24h), descartando');
-      return null;
-    }
+    if (Date.now() - parsed.ts > AUTH_MAX_AGE_MS) return null;
     return parsed.email;
-  } catch (_err) {
-    return null;
-  }
+  } catch (_e) { return null; }
 }
-
-function persistEmail(email) {
-  try {
-    localStorage.setItem(AUTH_STORAGE_EMAIL,
-      JSON.stringify({ email, ts: Date.now() }));
-  } catch (_err) { /* ignore quota / privacy mode */ }
-}
-
-function clearStoredEmail() {
-  try { localStorage.removeItem(AUTH_STORAGE_EMAIL); } catch (_err) {}
-}
-
+function persistEmail(email) { try { localStorage.setItem(AUTH_STORAGE_EMAIL, JSON.stringify({ email, ts: Date.now() })); } catch (_e) {} }
+function clearStoredEmail() { try { localStorage.removeItem(AUTH_STORAGE_EMAIL); } catch (_e) {} }
 async function sendSignInLink(email) {
   log('[auth] sendSignInLink', email);
   if (authSendBtnEl) authSendBtnEl.disabled = true;
@@ -379,145 +443,105 @@ async function sendSignInLink(email) {
     logerr('[auth] sendSignInLink ERROR', err);
     showAuthError(authErrorMessage(err && err.code));
     showAuthView('form', { email });
-  } finally {
-    if (authSendBtnEl) authSendBtnEl.disabled = false;
-  }
+  } finally { if (authSendBtnEl) authSendBtnEl.disabled = false; }
 }
-
 async function completeSignInFromLink() {
   if (!isSignInWithEmailLink(auth, window.location.href)) return false;
-  log('[auth] completeSignInFromLink (venimos del email)');
+  log('[auth] completeSignInFromLink');
   showAuthView('completing');
   let email = readStoredEmail();
   if (!email) {
-    // Email enviado desde otro dispositivo o tras limpiar localStorage.
-    email = window.prompt('Confirma tu email para completar el inicio de sesión:');
-    if (!email) {
-      showAuthError('Necesitamos tu email para completar el acceso.');
-      showAuthView('form');
-      return false;
-    }
+    email = window.prompt('Confirma tu email para completar el inicio de sesion:');
+    if (!email) { showAuthError('Necesitamos tu email.'); showAuthView('form'); return false; }
   }
   try {
     await signInWithEmailLink(auth, email, window.location.href);
     log('[auth] signInWithEmailLink OK', email);
     clearStoredEmail();
-    return true;  // onAuthStateChanged tomará el relevo.
+    return true;
   } catch (err) {
-    logerr('[auth] signInInWithEmailLink ERROR', err);
+    logerr('[auth] signInWithEmailLink ERROR', err);
     showAuthError(authErrorMessage(err && err.code));
     showAuthView('form', { email });
     return false;
   }
 }
-
 async function handleLogout() {
   log('[auth] handleLogout click');
-  try {
-    await signOut(auth);
-    log('[auth] signOut OK');
-    clearStoredEmail();
-    // onAuthStateChanged disparará con user=null y mostrará el modal.
-  } catch (err) {
-    logerr('[auth] signOut ERROR', err);
-    showAuthError('No pudimos cerrar sesión. Inténtalo de nuevo.');
-  }
+  closeHamburger();
+  try { await signOut(auth); log('[auth] signOut OK'); clearStoredEmail(); }
+  catch (err) { logerr('[auth] signOut ERROR', err); showAuthError('No pudimos cerrar sesion.'); }
 }
-
-// Submit del form de email.
 if (authFormEl && authEmailEl) {
   authFormEl.addEventListener('submit', e => {
     e.preventDefault();
     const raw = authEmailEl.value.trim();
-    log('[auth] submit', raw);
     if (!raw) { showAuthError('Introduce un email.'); return; }
-    // Regex pragmático (no RFC 5322 estricto). Suficiente para UX; el
-    // server de Firebase rechazará con auth/invalid-email si está mal.
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
-      showAuthError('Formato de email no válido.');
-      return;
-    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) { showAuthError('Formato de email no valido.'); return; }
     sendSignInLink(raw);
   });
-} else {
-  warn('[auth] #auth-form o #auth-email faltan — el login no funcionará');
 }
-
-// Botón Cancelar del estado 'sent'.
-if (authCancelBtnEl) {
-  authCancelBtnEl.addEventListener('click', () => {
-    log('[auth] cancelar envio -> volver a form');
-    clearStoredEmail();
-    showAuthView('form');
-  });
-}
-
-// Logout desde cabecera.
-if (logoutBtnEl) {
-  logoutBtnEl.addEventListener('click', handleLogout);
-} else {
-  warn('[auth] #logout-btn no encontrado — el usuario no podrá cerrar sesión desde la cabecera');
-}
-
-// Auth state observer: fuente de verdad de la UI.
+if (authCancelBtnEl) authCancelBtnEl.addEventListener('click', () => { clearStoredEmail(); showAuthView('form'); });
+if (logoutBtnEl) logoutBtnEl.addEventListener('click', handleLogout);
+if (menuLogoutBtnEl) menuLogoutBtnEl.addEventListener('click', handleLogout);
 onAuthStateChanged(auth, async user => {
   if (user) {
-    log('[auth] signed-in uid=', user.uid, 'email=', user.email);
+    log('[auth] signed-in', user.email);
     hideAuthModal();
     if (userEmailEl) userEmailEl.textContent = user.email || user.uid;
+    if (menuProfileEmailEl) menuProfileEmailEl.textContent = user.email || user.uid;
     showAppContent();
     subscribeItems();
+    subscribeCompras();
   } else {
-    log('[auth] signed-out (o nunca llegado)');
+    log('[auth] signed-out');
     unsubscribeItems();
+    unsubscribeCompras();
     if (userEmailEl) userEmailEl.textContent = '';
+    if (menuProfileEmailEl) menuProfileEmailEl.textContent = '—';
+    closeHamburger();
     hideAppContent();
-    // Antes de mostrar el form, mira si el navegador viene del
-    // email (caso típico de continuar el login desde el link).
     const completed = await completeSignInFromLink();
     if (!completed) showAuthView('form');
   }
 });
 
 // ============================================================
-// Base de datos isolada para testing
-// Bloque ejecutado ANTES del subscribeItems() para que el emulador
-// tome el control de RTDB antes de cualquier operacion. Auth emulator
-// también se conecta aquí (puerto 9099, separado del 9000 de RTDB):
-// Ver dev-isolation.txt.
+// Emulador local (RTDB:9000 + Auth:9099)
 // ============================================================
 if (window.location.search.includes('env=emul')) {
   try {
     connectDatabaseEmulator(db,   'localhost', 9000);
     connectAuthEmulator   (auth, 'localhost', 9099);
     log('[firebase] usando EMULADOR local (RTDB:9000 + Auth:9099)');
-    warn('[firebase] Auth emulador NO envía emails reales — el link aparece en los logs del emulador');
-  } catch (err) {
-    logerr('[firebase] connect emulador ERROR', err);
-  }
+    warn('[firebase] Auth emulador NO envia emails reales — el link aparece en los logs');
+  } catch (err) { logerr('[firebase] connect emulador ERROR', err); }
 }
 
 // ============================================================
-// Items: subscribe/unsubscribe gateado por el auth state observer
-// Mientras el usuario no esté autenticado, NO se suscribe a RTDB
-// (las reglas endurecidas `auth != null` rechazan reads;
-// centralizar el control aquí evita errores PERMISSION_DENIED
-// ruidosos). Ambos helpers son idempotentes.
+// Suscripciones RTDB gateadas por auth state
 // ============================================================
 let unsubItems = null;
 function subscribeItems() {
   if (unsubItems) return;
   log('[firebase] subscribe /items');
-  unsubItems = onValue(ref(db, 'items'),
-    renderLista,
-    err => logerr('[firebase] onValue ERROR', err)
-  );
+  unsubItems = onValue(ref(db, 'items'), renderLista, err => logerr('[firebase] onValue /items', err));
 }
 function unsubscribeItems() {
   if (!unsubItems) return;
-  unsubItems();
-  unsubItems = null;
+  unsubItems(); unsubItems = null;
   log('[firebase] unsubscribe /items');
+}
+let unsubCompras = null;
+function subscribeCompras() {
+  if (unsubCompras) return;
+  log('[firebase] subscribe /shared/compras');
+  unsubCompras = onValue(ref(db, 'shared/compras'), renderHistory, err => logerr('[firebase] onValue /shared/compras', err));
+}
+function unsubscribeCompras() {
+  if (!unsubCompras) return;
+  unsubCompras(); unsubCompras = null;
+  log('[firebase] unsubscribe /shared/compras');
 }
 
 // ============================================================
@@ -526,8 +550,8 @@ function unsubscribeItems() {
 addBtn    .addEventListener('click',  addItem);
 inputEl   .addEventListener('keypress', e => { if (e.key === 'Enter') { log('[add] Enter'); addItem(); } });
 validarBtn.addEventListener('click',  validarComprados);
-
-// Cerrar popup al pulsar fuera del card
+if (hamburgerBtnEl)     hamburgerBtnEl    .addEventListener('click', toggleHamburger);
+if (hamburgerBackdropEl) hamburgerBackdropEl.addEventListener('click', closeHamburger);
 document.addEventListener('click', e => {
   if (!popupEl) return;
   if (popupEl.classList.contains('hidden')) return;
@@ -536,17 +560,17 @@ document.addEventListener('click', e => {
     popupEl.classList.add('hidden');
   }
 });
-// Escape: cerrar popup de notas, o actuar sobre auth-modal según estado.
-// Auth-modal es bloqueante por diseño (David lo eligió fullscreen en
-// la pregunta 1 del kickoff de Fase 1.A), así que Escape NO cierra el
-// flow. En su lugar: 'form' → refocus del input email; 'sent' →
-// dispara el botón Cancelar; 'completing' → no-op para no abortar
-// una transacción Firebase en curso.
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
+  if (hamburgerMenuEl && !hamburgerMenuEl.classList.contains('hidden')) {
+    log('[hamburger] Escape -> cerrar');
+    closeHamburger();
+    return;
+  }
   if (popupEl && !popupEl.classList.contains('hidden')) {
     log('[popup] Escape -> cerrar');
     popupEl.classList.add('hidden');
+    return;
   }
   if (authModalEl && !authModalEl.classList.contains('hidden')) {
     const formVisible   = authFormEl && !authFormEl.classList.contains('hidden');
@@ -555,44 +579,26 @@ document.addEventListener('keydown', e => {
       authEmailEl.focus();
       log('[auth] Escape -> focus email input');
     } else if (cancelVisible) {
-      log('[auth] Escape -> cancelar envio (botón Cancelar)');
+      log('[auth] Escape -> cancelar envio');
       authCancelBtnEl.click();
     } else {
-      // 'completing' state: ignorar para no abortar el flujo Firebase.
-      log('[auth] Escape ignorado en completing (mid-flujo)');
+      log('[auth] Escape ignorado en completing');
     }
   }
 });
-
-// Botón X del popup — antes era `onclick="cerrarPopup()"` inline en el HTML.
-// Ahora conectado desde aquí para tener una única fuente de verdad (regla #03):
-// cualquier lógica futura (focus restoration, animación de cierre…) se aplica
-// sin sincronizar HTML y JS. Reentrada: ejecutar cerrarPopup con popup ya
-// cerrado es idempotente (classList.add no se duplica, solo registra en log).
 const popupCloseEl = document.getElementById('popup-close');
 if (popupCloseEl) {
-  popupCloseEl.addEventListener('click', () => {
-    log('[popup] click X -> cerrarPopup');
-    cerrarPopup();
-  });
-} else {
-  warn('[popup] no se encontró #popup-close — el botón X no cerrará el popup');
-}
+  popupCloseEl.addEventListener('click', () => { log('[popup] click X -> cerrarPopup'); cerrarPopup(); });
+} else { warn('[popup] no se encontro #popup-close'); }
 
 // ============================================================
 // Helpers
 // ============================================================
 function procesarInput(input) {
   log('[processor] procesarInput', { input });
-  // Extraer nombre y nota (si existe)
-  // Formato esperado: "nombre (nota)" o "nombre"
   const match = input.match(/^(.*?)\s*(?:\((.*)\))?$/);
-  if (!match) {
-    return { nombre: '', nota: '' };
-  }
-  
-  const nombre = match[1]?.trim() || '';
-  const nota = match[2]?.trim() || '';
-  
+  if (!match) return { nombre: '', nota: '' };
+  const nombre = (match[1] || '').trim();
+  const nota = (match[2] || '').trim();
   return { nombre, nota };
 }
