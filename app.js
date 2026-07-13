@@ -449,13 +449,26 @@ function openHamburger() {
   hamburgerBackdropEl.classList.remove('hidden');
   hamburgerBtnEl.setAttribute('aria-expanded', 'true');
   log('[hamburger] open');
+  // N1 a11y: foco al close button al abrir. Defer al siguiente tick
+  // para que el elemento sea tabbable (display: block tras quitar .hidden).
+  setTimeout(() => {
+    if (hamburgerCloseBtnEl) { hamburgerCloseBtnEl.focus({ preventScroll: true }); return; }
+    // Fallback: primer focusable del drawer.
+    const first = hamburgerMenuEl.querySelector(FOCUSABLE_SELECTOR);
+    if (first) first.focus({ preventScroll: true });
+  }, 0);
 }
 function closeHamburger() {
   if (!hamburgerMenuEl || !hamburgerBackdropEl || !hamburgerBtnEl) return;
+  const wasOpen = !hamburgerMenuEl.classList.contains('hidden');
   hamburgerMenuEl.classList.add('hidden');
   hamburgerBackdropEl.classList.add('hidden');
   hamburgerBtnEl.setAttribute('aria-expanded', 'false');
   log('[hamburger] close');
+  // N1 a11y: devolver foco al trigger del ☰ SOLO si el drawer
+  // estaba abierto (no en cierres redundantes o durante logout flow,
+  // donde el modal de auth tomara el foco inmediatamente).
+  if (wasOpen) { hamburgerBtnEl.focus({ preventScroll: true }); }
 }
 function toggleHamburger() {
   if (!hamburgerMenuEl) return;
@@ -665,8 +678,33 @@ document.addEventListener('click', e => {
     popupEl.classList.add('hidden');
   }
 });
-document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape') return;
+// N1 a11y: focus trap Tab/Shift+Tab dentro del drawer abierto.
+// Si el foco esta fuera del drawer (click en backdrop, etc.) lo trae
+// de vuelta al primer focusable. Si esta en el primero/ultimo con
+// Shift/Tab, lo hace wrap-around al ultimo/primero respectivamente.
+// El selector incluye <summary> para que el usuario de teclado pueda
+// togglear el acordeon del historial con Enter/Space (Safari + spec).
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+if (e.key === 'Tab' && hamburgerMenuEl && !hamburgerMenuEl.classList.contains('hidden')) {
+  const focusable = Array.from(hamburgerMenuEl.querySelectorAll(FOCUSABLE_SELECTOR));
+  if (focusable.length === 0) { e.preventDefault(); return; }
+  const first = focusable[0];
+  const last  = focusable[focusable.length - 1];
+  const active = document.activeElement;
+  const focusInDrawer = hamburgerMenuEl.contains(active);
+  if (!focusInDrawer) {
+    e.preventDefault();
+    first.focus({ preventScroll: true });
+  } else if (e.shiftKey && active === first) {
+    e.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault();
+    first.focus({ preventScroll: true });
+  }
+  return;
+}
+if (e.key !== 'Escape') return;
   if (hamburgerMenuEl && !hamburgerMenuEl.classList.contains('hidden')) {
     log('[hamburger] Escape -> cerrar');
     closeHamburger();

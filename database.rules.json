@@ -35,7 +35,7 @@
           },
 
           "items": {
-            ".validate": "newData.hasChildren()",
+            ".validate": "newData.hasChildren() && newData.numChildren() <= 100",
 
             "$itemKey": {
               ".validate": "newData.hasChildren(['nombre'])",
