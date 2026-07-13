@@ -165,9 +165,11 @@
    Emulator Hub:        127.0.0.1:4400  (gestion interna)
 
 =============================================================
- Cualquier cambio en esta guia debe revisarse tb en el
- commit de Fase 1.A (commits f7e327f + d5cec7d + ff37025). El
- README.md tiene una copia parcial de esta guia con secciones
- marcadas obsoletas (3 caminos, reglas abiertas, "Proximo nivel
- recomendado") - actualizalas en sincronia con este archivo.
+ Si modificas esta guia, sincroniza README.md al mismo tiempo:
+   - Bloque "Caracteristicas" (bullet "Aislamiento dev/prod")
+   - Bloque "Estructura del proyecto" (linea dev-isolation.txt)
+   - Bloque "Reglas de Realtime Database" (estado + comando
+     emulators y nota post-deploy)
+ Las dos van siempre a la par. Cualquier cambio en este archivo
+ debe ir acompaniado del correspondiente ajuste en README.
 =============================================================

@@ -210,7 +210,11 @@ Una sola línea:
 npx firebase-tools login && npx firebase-tools deploy --only database --project shopmate-e9195
 ```
 
-Eso hace: autenticación OAuth vía navegador + validación + publicación de las reglas. Si quieres probar antes sin tocar producción:
+Eso hace: autenticación OAuth vía navegador + validación + publicación de las reglas.
+
+> ℹ️ **Tras deploy:** los clientes activos con sesión persistida pueden requerir un **refresh duro del navegador** (`Ctrl+Shift+R`) la primera vez que carguen contra las reglas nuevas. El ID token es válido hasta su expiración natural, pero el listener RTDB queda contra el contexto de auth previo (a veces con efecto cache PERMISSION_DENIED). Un reload limpia el cache y vuelve a negociar.
+
+Si quieres probar antes sin tocar producción:
 
 ```bash
 npx firebase-tools emulators:start --only auth,database --project shopmate-e9195 --import=./emulator-data --export-on-exit
