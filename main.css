@@ -303,38 +303,7 @@ button:hover {
  * blanco de card, esquinas 12-16px). Si David customiza esos
  * hex más adelante, este bloque debe actualizarse en paralelo.
  * ============================================================= */
-.app-content.hidden,
-.user-info.hidden { display: none !important; }
-
-.user-info {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: #205746;
-  font-size: 0.9rem;
-}
-.user-info #user-email {
-  white-space: nowrap;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 500;
-}
-.user-info button#logout-btn {
-  background: transparent;
-  color: #205746;
-  border: 1px solid #205746;
-  font-size: 0.8rem;
-  padding: 0.3rem 0.7rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-family: inherit;
-  font-weight: 600;
-}
-.user-info button#logout-btn:hover {
-  background: #205746;
-  color: #fff;
-}
+.app-content.hidden { display: none !important; }
 
 .modal {
   position: fixed;

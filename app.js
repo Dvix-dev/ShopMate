@@ -51,8 +51,8 @@ const authSendBtnEl   = document.getElementById('auth-send');
 const authCancelBtnEl = document.getElementById('auth-cancel');
 const authErrorEl     = document.getElementById('auth-error');
 const authMessageEl   = document.getElementById('auth-message');
-const userInfoEl      = document.getElementById('user-info');
-const userEmailEl     = document.getElementById('user-email');
+// El email del usuario se muestra solo en el drawer (sección Perfil).
+// El header ya no muestra "Identificado como" (commit header-cleanup).
 // El boton logout del header ya no existe (commit refactor). El drawer
 // lateral lo reemplaza. La referencia legacy se ignora si el nodo
 // no esta presente en el DOM (defensa para tests de regresion).
@@ -544,11 +544,9 @@ function showAuthView(state, opts) {
 function hideAuthModal() { if (authModalEl) authModalEl.classList.add('hidden'); }
 function showAppContent() {
   if (appContentEl) { appContentEl.classList.remove('hidden'); appContentEl.style.display = ''; }
-  if (userInfoEl) userInfoEl.classList.remove('hidden');
 }
 function hideAppContent() {
   if (appContentEl) { appContentEl.classList.add('hidden'); appContentEl.style.display = 'none'; }
-  if (userInfoEl) userInfoEl.classList.add('hidden');
 }
 function showAuthError(message) {
   if (!authErrorEl) { logerr('[auth] no #auth-error', message); return; }
@@ -619,24 +617,33 @@ if (authCancelBtnEl) authCancelBtnEl.addEventListener('click', () => { clearStor
 if (logoutBtnEl) logoutBtnEl.addEventListener('click', handleLogout);
 if (menuLogoutBtnEl) menuLogoutBtnEl.addEventListener('click', handleLogout);
 onAuthStateChanged(auth, async user => {
-  if (user) {
-    log('[auth] signed-in', user.email);
-    hideAuthModal();
-    if (userEmailEl) userEmailEl.textContent = user.email || user.uid;
-    if (menuProfileEmailEl) menuProfileEmailEl.textContent = user.email || user.uid;
-    showAppContent();
-    subscribeItems();
-    subscribeCompras();
-  } else {
-    log('[auth] signed-out');
-    unsubscribeItems();
-    unsubscribeCompras();
-    if (userEmailEl) userEmailEl.textContent = '';
-    if (menuProfileEmailEl) menuProfileEmailEl.textContent = '—';
-    closeHamburger();
-    hideAppContent();
-    const completed = await completeSignInFromLink();
-    if (!completed) showAuthView('form');
+  // Try-catch global: si cualquier operacion dentro del callback falla
+  // (e.g. isSignInWithEmailLink lanza, o un null reference), queremos
+  // ASEGURARNOS de que la auth modal se muestra cuando el user es null.
+  // Sin este try-catch, un error silencioso dejaba la app en un estado
+  // roto: app visible, auth modal oculto, sin forma de hacer login.
+  // (Bug reportado en mobile 2026-07-13.)
+  try {
+    if (user) {
+      log('[auth] signed-in', user.email);
+      hideAuthModal();
+      if (menuProfileEmailEl) menuProfileEmailEl.textContent = user.email || user.uid;
+      showAppContent();
+      subscribeItems();
+      subscribeCompras();
+    } else {
+      log('[auth] signed-out');
+      unsubscribeItems();
+      unsubscribeCompras();
+      if (menuProfileEmailEl) menuProfileEmailEl.textContent = '—';
+      closeHamburger();
+      hideAppContent();
+      const completed = await completeSignInFromLink();
+      if (!completed) showAuthView('form');
+    }
+  } catch (err) {
+    logerr('[auth] onAuthStateChanged ERROR', err);
+    if (!user) showAuthView('form');
   }
 });
 
