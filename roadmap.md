@@ -39,7 +39,7 @@
 > Estos pasos se ejecutan UNA vez desde Firebase Console con tu cuenta Google antes de poder usar el flujo de Email-link. Sin ellos, el código commiteado queda funcional pero el flujo end-to-end (envío real de emails a tu correo) NO arranca.
 
 - [x] **Habilitar Email-link (passwordless)**: `Build > Authentication > Sign-in method > Email/Password` → activar el toggle **Email link (passwordless)**. Provider debe quedar Enabled. _Verificado 2026-07-13: E2E completo (envío de magic link a David OK)_.
-- [x] **Authorized domains**: en la misma pestaña, sección **Authorized domains**:
+- [x] **Authorized domains**: en la misma pestaña, sección **Authorized domains**. _E2E validado el 2026-07-13 en el dominio prod real de David (Firebase Console acepta el que esté en la lista). Los recomendados por defecto:_
   - `localhost` — para desarrollo local (con `python -m http.server 8080`).
   - `158.179.223.22` — IP del servidor prod Ubuntu (o el dominio real que uses; Firebase maneja IPs pero muestra warning — un dominio propio es preferible; letsencrypt en §Seguridad).
   - `shopmate-e9195.firebaseapp.com` — ya viene por defecto.
@@ -223,7 +223,7 @@
 - [ ] Tests unitarios de `renderLista` con jest + jsdom.
 - [ ] Tests E2E con Playwright (añadir, marcar, validar, login).
 - [ ] Linter básico con eslint + prettier para `app.js`.
-- [x] `firebase-tools` deploy de reglas (paso único pendiente).
+- [x] `firebase-tools` deploy de reglas (hecho el 2026-07-13 con la cuenta Owner de David).
 - [ ] CI/CD con GitHub Actions: build web → `npx cap sync android` → APK firmado.
 - [ ] Sustituir SFTP manual por Firebase Hosting (web) + Play Store (Android).
 - [ ] Internacionalización i18n (`es` / `en` / `ca`) usando `data-i18n` + JSON por idioma.

@@ -30,9 +30,9 @@ Toda la información se sincroniza a través de **Firebase Realtime Database**, 
 
 ---
 
-## ⚠️ Estado actual del proyecto
+## 📜 Estado actual del proyecto
 
-> **Importante:** los archivos `app.js`, `index.html`, `main.css` y los recursos de `assets/` actualmente se encuentran **vacíos (0 bytes)** en el directorio de trabajo por un commit de "limpieza" (`d4ecc06`) que sobrescribió los archivos con contenido vacío.
+> ✅ **Estado actual (post-Fase 0.B, 2026-07-13):** los archivos funcionales están restaurados en el directorio de trabajo (commits de Fase 0). La versión que se ve en `MAIN` es operativa — solo la sección siguiente queda como **referencia histórica** para evitar repetir el desastre del commit `d4ecc06` que vació los archivos.
 >
 > La versión funcional del proyecto está disponible en los commits previos:
 >
@@ -153,7 +153,7 @@ ShopMate/
 
 ## 🔥 Configuración de Firebase y seguridad
 
-> ✅ **Estado actual:** la migración ya está aplicada. `app.js` ya **no contiene claves reales** — importa `firebaseConfig` desde `./firebase-config.js`, que carga las claves desde `firebase-config.local.js` (gitignored). Las reglas RTDB endurecidas están desplegadas a Firebase prod desde 2026-07-13 (ver `roadmap.md` §1.A.Close).
+> ✅ **Estado actual:** la migración ya está aplicada. `app.js` ya **no contiene claves reales** — importa `firebaseConfig` desde `./firebase-config.js`, que carga las claves desde `firebase-config.local.js` (gitignored). Las reglas RTDB endurecidas están desplegadas a Firebase prod desde 2026-07-13 (ver `roadmap.md` §0.B).
 
 ### Flujo de carga
 
@@ -193,12 +193,14 @@ El archivo `.vscode/sftp.json` contiene tu nombre de usuario Windows y la ruta d
 
 > ✅ **Estado actual (2026-07-13):** las reglas endurecidas con `auth != null` viven en `database.rules.json` (commit `d5cec7d` chore(rules)) y están **desplegadas a Firebase prod**. Firebase prod evalúa con las reglas nuevas; el emulador local (`?env=emul`) evalúa las mismas reglas (commit `ff37025` chore(dev) habilitó el bloque emulators).
 
-Las reglas en `database.rules.json` están endurecidas con `auth != null` (requieren usuario autenticado para leer y escribir). Mientras no se desplieguen a Firebase prod, las reglas desplegadas siguen siendo las antiguas (`.read/.write: true` abiertas). En local con `?env=emul` el emulador ya evalúa las reglas nuevas. Para desplegar las endurecidas a prod:
+Las reglas en `database.rules.json` están endurecidas con `auth != null` (requieren usuario autenticado para leer y escribir). **Desplegadas a Firebase prod el 2026-07-13** (commit `d5cec7d` + deploy con cuenta Owner de David). El emulador local (`?env=emul`) evalúa las mismas reglas.
 
 - ✅ Validación de esquema: cada item debe tener `nombre` (string no vacío, máx 80) y `comprado` (boolean).
 - ✅ `nota` opcional, string de hasta 500 caracteres.
 - ✅ Tope blando de 500 items en la colección para evitar abuso (cap de **defensa-en-profundidad** enforzado en `app.js` como `MAX_ITEMS`; el cap server-side original con `newData.numChildren() <= 500` no se pudo activar porque el emulador RTDB v4.11 lo rechaza; la validación de esquema sigue siendo server-side y robusta).
 - ✅ Índice en `comprado` para queries eficientes.
+
+> ℹ️ Si necesitas volver a desplegar las reglas en el futuro (p.ej. tras una nueva iteración), los pasos exactos siguen al final de esta sección ("Opción A — Desplegar con firebase-tools"); son los mismos comandos que se ejecutaron el 2026-07-13.
 
 > 🛟 **Auth (Fase 1.A) ya implementado** (commits `f7e327f` feat(auth) + `d5cec7d` chore(rules)). El cap de 500 items sigue client-side (`MAX_ITEMS` en `app.js`) porque el emulador RTDB v4.11 rechazaba `newData.numChildren()`. Con auth, un atacante tendría que registrar cuentas masivamente (cuota Auth del plan gratuito) para mutar datos; el cap client-side complementa como defensa-en-profundidad UX.
 
