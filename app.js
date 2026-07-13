@@ -18,7 +18,7 @@ const logerr = (...a) => {              console.error(...a); };
 // ============================================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
 import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
-import { getDatabase, ref, onValue, push, update, remove, get, set, serverTimestamp, connectDatabaseEmulator } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+import { getDatabase, ref, onValue, push, update, remove, get, set, serverTimestamp, runTransaction, connectDatabaseEmulator } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
 import {
   getAuth, onAuthStateChanged,
   sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
@@ -184,28 +184,52 @@ async function validarComprados() {
   if (!requireAuth('validarComprados')) return;
   log('[validator] click');
   try {
+    // 1. Lee los items marcados (snapshot inicial, no transaccion todavia).
     const snapshot = await get(ref(db, 'items'));
-    const itemsToArchive = {};
-    const keysToRemove = [];
+    const toProcess = [];
     snapshot.forEach(childSnapshot => {
       const item = childSnapshot.val();
       if (item && item.comprado) {
-        keysToRemove.push(childSnapshot.key);
-        const archived = { nombre: item.nombre };
-        if (item.nota) archived.nota = item.nota;
-        itemsToArchive[childSnapshot.key] = archived;
+        toProcess.push({ key: childSnapshot.key, item });
       }
     });
-    log('[validator] items a archivar', keysToRemove.length);
-    if (keysToRemove.length === 0) { log('[validator] no hay marcados'); return; }
+    log('[validator] items marcados', toProcess.length);
+    if (toProcess.length === 0) return;
+
+    // 2. Para cada item, usa runTransaction para borrarlo atomicamente.
+    //    Si la transaccion NO se committed (otro cliente ya borro/desmarco
+    //    el item), ese item NO se archiva. Asi evitamos duplicar compras
+    //    en paralelo (B1 fix: race condition en doble-archivo).
+    const itemsToArchive = {};
+    for (const { key, item } of toProcess) {
+      try {
+        const txResult = await runTransaction(ref(db, 'items/' + key), current => {
+          if (!current) return current;            // ya no existe, abort
+          if (!current.comprado) return current;   // alguien desmarcó, abort
+          return null;                              // delete
+        });
+        if (txResult.committed) {
+          const archived = { nombre: item.nombre };
+          if (item.nota) archived.nota = item.nota;
+          itemsToArchive[key] = archived;
+        } else {
+          log('[validator] tx no committed para', key, '- skip');
+        }
+      } catch (txErr) {
+        logerr('[validator] runTransaction ERROR en', key, txErr);
+      }
+    }
+
+    if (Object.keys(itemsToArchive).length === 0) {
+      log('[validator] nada que archivar (todas las tx fallaron)');
+      return;
+    }
+
+    // 3. Crea la compra con los items que SI se pudieron archivar.
     const newCompraRef = push(ref(db, 'shared/compras'));
-    log('[validator] creando compra', newCompraRef.key);
+    log('[validator] creando compra', newCompraRef.key, 'con', Object.keys(itemsToArchive).length, 'items');
     await set(newCompraRef, { fecha: serverTimestamp(), items: itemsToArchive });
-    log('[validator] compra creada OK, eliminando items');
-    const updates = {};
-    keysToRemove.forEach(k => { updates['items/' + k] = null; });
-    await update(ref(db), updates);
-    log('[validator] items eliminados OK', keysToRemove.length);
+    log('[validator] compra creada OK');
   } catch (err) { logerr('[validator] ERROR', err); }
 }
 
@@ -242,64 +266,139 @@ async function trimCompras() {
 //   - <div class="history-item-content">: lista de items
 // Push keys son time-ordered. Invertimos para most recent-first.
 // Si size > MAX_COMPRAS disparamos trimCompras().
+//
+// B2 fix: NO destruimos el DOM en cada onValue. Reconciliamos via
+// `historyItemsMap` (key -> <details>) para preservar el estado
+// open/closed de cada <details> cuando llega un update de otro cliente.
 // ============================================================
+
+// Mapa key -> <details> para reconciliar sin destruir el DOM.
+const historyItemsMap = new Map();
+
+// Crea un <details> nuevo para una compra. Usado cuando llega
+// una compra que no esta en el Map.
+function createHistoryItem(key, val) {
+  const details = document.createElement('details');
+  details.classList.add('history-item');
+  details.dataset.compraKey = key;
+  const summary = document.createElement('summary');
+  const meta = document.createElement('span');
+  meta.classList.add('history-item-meta');
+  const date = document.createElement('span');
+  date.classList.add('history-item-date');
+  date.textContent = formatCompraDate(val && val.fecha);
+  const count = document.createElement('span');
+  count.classList.add('history-item-count');
+  const itemCount = (val && val.items) ? Object.keys(val.items).length : 0;
+  count.textContent = itemCount + ' producto' + (itemCount !== 1 ? 's' : '');
+  meta.appendChild(date);
+  meta.appendChild(count);
+  summary.appendChild(meta);
+  details.appendChild(summary);
+  if (val && val.items) {
+    const content = document.createElement('div');
+    content.classList.add('history-item-content');
+    Object.values(val.items).forEach(item => {
+      if (!item || !item.nombre) return;
+      const product = document.createElement('div');
+      product.classList.add('history-product');
+      const name = document.createElement('span');
+      name.classList.add('history-product-name');
+      name.textContent = item.nombre;
+      product.appendChild(name);
+      if (item.nota) {
+        const note = document.createElement('span');
+        note.classList.add('history-product-note');
+        note.textContent = '— ' + item.nota;
+        product.appendChild(note);
+      }
+      content.appendChild(product);
+    });
+    details.appendChild(content);
+  }
+  return details;
+}
+
+// Actualiza el contenido (summary + content) de un <details> existente
+// sin destruirlo, preservando su estado open/closed.
+function updateHistoryItemContent(el, val) {
+  const dateEl = el.querySelector('.history-item-date');
+  if (dateEl) dateEl.textContent = formatCompraDate(val && val.fecha);
+  const countEl = el.querySelector('.history-item-count');
+  if (countEl) {
+    const itemCount = (val && val.items) ? Object.keys(val.items).length : 0;
+    countEl.textContent = itemCount + ' producto' + (itemCount !== 1 ? 's' : '');
+  }
+  let content = el.querySelector('.history-item-content');
+  if (val && val.items) {
+    if (!content) {
+      content = document.createElement('div');
+      content.classList.add('history-item-content');
+      el.appendChild(content);
+    }
+    content.innerHTML = '';
+    Object.values(val.items).forEach(item => {
+      if (!item || !item.nombre) return;
+      const product = document.createElement('div');
+      product.classList.add('history-product');
+      const name = document.createElement('span');
+      name.classList.add('history-product-name');
+      name.textContent = item.nombre;
+      product.appendChild(name);
+      if (item.nota) {
+        const note = document.createElement('span');
+        note.classList.add('history-product-note');
+        note.textContent = '— ' + item.nota;
+        product.appendChild(note);
+      }
+      content.appendChild(product);
+    });
+  } else if (content) {
+    content.remove();
+  }
+}
+
 function renderHistory(snapshot) {
   log('[history] render', snapshot.size);
   if (!historyListEl) return;
-  Array.from(historyListEl.children).forEach(child => {
-    if (child !== historyEmptyEl) child.remove();
-  });
+
   if (snapshot.size === 0) {
     if (historyEmptyEl) historyEmptyEl.classList.remove('hidden');
+    historyItemsMap.forEach(el => el.remove());
+    historyItemsMap.clear();
     return;
   }
   if (historyEmptyEl) historyEmptyEl.classList.add('hidden');
+
   const compras = [];
   snapshot.forEach(childSnapshot => {
     compras.push({ key: childSnapshot.key, val: childSnapshot.val() });
   });
   compras.reverse();
-  compras.forEach(({ key, val }) => {
-    const details = document.createElement('details');
-    details.classList.add('history-item');
-    details.dataset.compraKey = key;
-    const summary = document.createElement('summary');
-    const meta = document.createElement('span');
-    meta.classList.add('history-item-meta');
-    const date = document.createElement('span');
-    date.classList.add('history-item-date');
-    date.textContent = formatCompraDate(val && val.fecha);
-    const count = document.createElement('span');
-    count.classList.add('history-item-count');
-    const itemCount = (val && val.items) ? Object.keys(val.items).length : 0;
-    count.textContent = itemCount + ' producto' + (itemCount !== 1 ? 's' : '');
-    meta.appendChild(date);
-    meta.appendChild(count);
-    summary.appendChild(meta);
-    details.appendChild(summary);
-    if (val && val.items) {
-      const content = document.createElement('div');
-      content.classList.add('history-item-content');
-      Object.values(val.items).forEach(item => {
-        if (!item || !item.nombre) return;
-        const product = document.createElement('div');
-        product.classList.add('history-product');
-        const name = document.createElement('span');
-        name.classList.add('history-product-name');
-        name.textContent = item.nombre;
-        product.appendChild(name);
-        if (item.nota) {
-          const note = document.createElement('span');
-          note.classList.add('history-product-note');
-          note.textContent = '— ' + item.nota;
-          product.appendChild(note);
-        }
-        content.appendChild(product);
-      });
-      details.appendChild(content);
+
+  const newKeys = new Set(compras.map(c => c.key));
+
+  // Elimina compras que ya no estan (e.g. tras trim).
+  for (const [key, el] of historyItemsMap) {
+    if (!newKeys.has(key)) {
+      el.remove();
+      historyItemsMap.delete(key);
     }
-    historyListEl.appendChild(details);
+  }
+
+  // Upsert en orden desc. appendChild mueve el nodo al final,
+  // asi garantizamos el orden de visualizacion sin recrear nodos.
+  compras.forEach(({ key, val }) => {
+    let el = historyItemsMap.get(key);
+    if (!el) {
+      el = createHistoryItem(key, val);
+      historyItemsMap.set(key, el);
+    } else {
+      updateHistoryItemContent(el, val);
+    }
+    historyListEl.appendChild(el);
   });
+
   if (snapshot.size > MAX_COMPRAS) {
     log('[history] size > MAX_COMPRAS -> trim');
     trimCompras();
