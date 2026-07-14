@@ -110,7 +110,16 @@
                   class="modal-password-toggle"
                   aria-label="Mostrar contraseña"
                   aria-pressed="false">
-            <span class="modal-password-toggle-icon" aria-hidden="true">👁</span>
+            <!-- SVG único; el slash aparece via [aria-pressed="true"] CSS. -->
+            <svg class="modal-password-toggle-icon" viewBox="0 0 24 24"
+                 width="22" height="22"
+                 fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 aria-hidden="true">
+              <path class="modal-pw-arc" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle class="modal-pw-pupil" cx="12" cy="12" r="3"/>
+              <line class="modal-pw-slash" x1="2" y1="2" x2="22" y2="22"/>
+            </svg>
           </button>
         </div>
 
@@ -128,16 +137,18 @@
         <div class="modal-actions">
           <button type="submit" id="auth-send">Iniciar sesión</button>
         </div>
-        <button type="button" id="auth-mode-toggle"
-                class="modal-mode-toggle"
-                aria-label="Cambiar entre iniciar sesión y crear cuenta">
-          ¿No tienes cuenta? Regístrate
-        </button>
-        <button type="button" id="auth-forgot-password"
-                class="modal-mode-toggle modal-forgot-link"
-                aria-label="Recuperar contraseña por email">
-          ¿Olvidaste tu contraseña?
-        </button>
+        <div class="modal-mode-toggles">
+          <button type="button" id="auth-mode-toggle"
+                  class="modal-mode-toggle"
+                  aria-label="Cambiar entre iniciar sesión y crear cuenta">
+            ¿No tienes cuenta? Regístrate
+          </button>
+          <button type="button" id="auth-forgot-password"
+                  class="modal-mode-toggle modal-forgot-link"
+                  aria-label="Recuperar contraseña por email">
+            ¿Olvidaste tu contraseña?
+          </button>
+        </div>
       </form>
 
       <!-- Bloque de confirmación tras enviar reset (visible solo en state='reset-sent'). -->
@@ -157,6 +168,7 @@
     </div>
   </div>
 
-  <script type="module" src="app.js"></script>
+  <!-- ?v=2 cache-bust: si vuelves a tocar app.js, bumpea la query string. -->
+  <script type="module" src="app.js?v=2"></script>
 </body>
 </html>

@@ -849,8 +849,8 @@ function togglePasswordVisibility() {
     authPasswordToggleEl.setAttribute('aria-pressed', 'true');
     authPasswordToggleEl.setAttribute('aria-label', 'Ocultar contraseña');
   }
-  const iconSpan = authPasswordToggleEl.querySelector('.modal-password-toggle-icon');
-  if (iconSpan) iconSpan.textContent = isShown ? '👁' : '🙈';
+  // El icono ahora es SVG; el slash aparece via CSS [aria-pressed="true"].
+  // (Antes swapeabamos emoji 👁/🙈 en un <span>. Ya no aplica.)
   authPasswordEl.focus();
 }
 async function handleLogout() {
