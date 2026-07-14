@@ -89,6 +89,21 @@ const hamburgerCloseBtnEl = document.getElementById('hamburger-close-btn');
 const menuProfileEmailEl = document.getElementById('menu-profile-email');
 const menuLogoutBtnEl    = document.getElementById('menu-logout-btn');
 const historyListEl      = document.getElementById('history-list');
+// Long-press context menu + edit popup (§1.D Control de items).
+const itemActionsPopupEl     = document.getElementById('item-actions-popup');
+const itemActionsTitleEl     = document.getElementById('item-actions-title');
+const itemActionsNameEl      = document.getElementById('item-actions-name');
+const itemActionsCloseEl     = document.getElementById('item-actions-close');
+const itemActionsEditBtnEl   = document.getElementById('item-actions-edit');
+const itemActionsDeleteBtnEl = document.getElementById('item-actions-delete');
+const itemEditPopupEl        = document.getElementById('item-edit-popup');
+const itemEditTitleEl        = document.getElementById('item-edit-title');
+const itemEditNameEl         = document.getElementById('item-edit-name');
+const itemEditNoteEl         = document.getElementById('item-edit-note');
+const itemEditFormEl         = document.getElementById('item-edit-form');
+const itemEditCancelBtnEl    = document.getElementById('item-edit-cancel');
+const itemEditSaveBtnEl      = document.getElementById('item-edit-save');
+const itemEditCloseEl        = document.getElementById('item-edit-close');
 const historyEmptyEl     = document.getElementById('history-empty');
 log('[dom] refs OK', {
   checklistEl: !!checklistEl,
@@ -164,12 +179,25 @@ function renderLista(snapshot) {
       notaIcon.style.cursor = 'pointer';
       notaIcon.title = 'Ver nota';
       notaIcon.style.marginLeft = '10px';
-      notaIcon.addEventListener('click', () => {
+      notaIcon.addEventListener('click', e => {
+        // Cuando el user hace long-press sobre la nota-icon y luego suelta,
+        // el pointerup dispara un `click` sobre el mismo target que, sin
+        // un stopper, abriría AMBOS popups (context menu + nota). El stopper
+        // se registra en capture phase dentro del timer de long-press (ver
+        // attachItemRowActions), asi que este listener nunca llega a
+        // dispararse en ese escenario. Solo corre cuando el user tappea
+        // normalmente (< LONG_PRESS_MS, sin move) sobre el icono.
         log('[render] click icono nota', key, item.nombre);
         mostrarNotaPopup(item.nombre, item.nota);
       });
       wrapper.appendChild(notaIcon);
     }
+
+    // Long-press → context menu (Editar/Eliminar). Adjuntamos en el wrapper,
+    // no en cada hijo, para tener un solo timer y no interferir con el
+    // click del checkbox o del nota-icon. El cancel-on-move distingue
+    // long-press de scroll/zoom; pointer events cubren mouse+touch+pen.
+    attachItemRowActions(wrapper, key, item);
   });
 
   validarBtn.style.display = hayMarcados ? 'block' : 'none';
@@ -482,6 +510,311 @@ function cerrarPopup() {
 }
 
 // ============================================================
+// §1.D Control de items — long-press context menu + edit/delete.
+// Movil-first: long-press (500ms estandar Android/iOS) sobre un
+// item abre un menu contextual con [Editar] y [Eliminar]. Click
+// corto en el mismo area sigue siendo toggle de checkbox o apertura
+// de nota-popup (sin conflictos gracias al capture-phase click stopper
+// registrado dentro del timer de long-press; {once:true} lo autoelimina tras
+// el primer click. preventDefault en click de checkbox bloquea el toggle
+// y por tanto no dispara `change`; stopPropagation corta la bubble que dispararia
+// el listener del notaIcon).
+// que el listener del nota-icon chequea).
+// Drag-to-reorder esta DIFERIDO al roadmap (§2.D) por complejidad:
+// requiere schema migration con sortIndex o LexoHash para que el
+// orden persista en RTDB (los objetos JSON no tienen orden implicito
+// + onValue los vuelve a su orden por push key en cada update), y
+// ademas arbitraje de conflictos entre 2 usuarios arrastrando a
+// la vez. Estimado: ~300 LOC + refactor de render.
+//
+// Highlights del approach:
+//   - Pointer events cross-platform (mouse + touch + pen).
+//   - 8px move threshold distingue long-press de scroll/zoom.
+//   - Edit popup usa dos inputs separados (UX mas convencional)
+//     en lugar del formato "nombre (nota)" del add-item.
+//   - Delete usa toast undo (5s) en vez de confirm dialog (mas
+//     rapido, reversible, ya documentado en §1.D roadmap).
+//   - Snapshots para undo se capturan en ACT y se serializan con
+//     JSON parse/stringify (deep clone barato de objetos planos).
+//   - Re-fetch via get() al abrir Edit para evitar editar datos
+//     stale si el user abre el menu mientras otro cliente cambio
+//     el item.
+// ============================================================
+
+// Estado contextual del item actualmente en accion. Set al abrir el
+// menu contextual, clear al cerrarlo. _actionItemSnapshot se mantiene
+// despues de cerrar si el ultimo action fue delete (para soportar undo).
+let _actionItemKey      = null;
+let _actionItemSnapshot = null;     // { nombre, comprado, nota? } — null si edit en curso
+let _actionInProgress   = false;    // true mientras un CRUD esta en await (disable buttons)
+
+// Flag global: cuando long-press dispara, suprimimos cualquier click
+// que aparezca <400ms despues (escenario: press larga sobre notaIcon
+// + release encima de la misma = click sobre nota-icon). Se limpia
+// en setTimeout 400ms via attachItemRowActions.
+const LONG_PRESS_MS              = 500;
+const LONG_PRESS_MOVE_THRESHOLD  = 8;        // px; >8 = scroll, no long-press
+const MAX_ITEM_NAME_LEN          = 80;       // mismo cap que database.rules.json
+const MAX_ITEM_NOTE_LEN          = 200;      // nota puede ser mas larga que el nombre (descriptions)
+
+// ============================================================
+// attachItemRowActions: setup de long-press en un wrapper .list-item.
+// Pointer events: pointerdown arranca timer; pointermove cancela si
+// delta > threshold; pointerup/pointercancel/pointerleave cancelan.
+// NOTA: usamos listener sobre wrapper, no addEventListener opciones
+// { once } — el wrapper vive dentro de checklistEl.innerHTML=''
+// replacements, asi que estos listeners se destruyen con el wrapper
+// en cada renderLista. No hay leak entre re-renders.
+// ============================================================
+function attachItemRowActions(wrapper, key, item) {
+  let pressTimer       = null;
+  let pressStarted     = false;
+  let startX = 0, startY = 0;
+
+  function startPress(clientX, clientY) {
+    pressStarted = true;
+    startX = clientX;
+    startY = clientY;
+    pressTimer = setTimeout(() => {
+      if (!pressStarted) return;
+      pressStarted = false;
+      // Click stopper (capture phase, once): el pointerup que viene justo
+      // despues del long-press genera un `click` event sobre el mismo
+      // target original (checkbox, nota-icon, label). Sin stopper, ese
+      // click togglea `comprado` (checkbox) y/o abre el nota-popup. Con
+      // capture:true + once:true + preventDefault + stopPropagation,
+      // neutralizamos UNA SOLA VEZ el siguiente click: preventDefault evita
+      // que el checkbox cambie su checked state (y por tanto no dispara
+      // change), stopPropagation evita que el listener del notaIcon corra.
+      // Una vez disparado, el listener se auto-elimina (once:true).
+      wrapper.addEventListener('click', ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }, { once: true, capture: true });
+      showItemActions(key, item);
+    }, LONG_PRESS_MS);
+  }
+
+  function cancelPress() {
+    pressStarted = false;
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  }
+
+  function movePress(clientX, clientY) {
+    if (!pressStarted || !pressTimer) return;
+    const dx = Math.abs(clientX - startX);
+    const dy = Math.abs(clientY - startY);
+    if (dx > LONG_PRESS_MOVE_THRESHOLD || dy > LONG_PRESS_MOVE_THRESHOLD) cancelPress();
+  }
+
+  wrapper.addEventListener('pointerdown', e => {
+    // Solo button=0 (izquierda) en mouse; touch/pen siempre 0. Evita
+    // trigger accidental con click derecho del raton en desktop.
+    if (e.button !== undefined && e.button !== 0) return;
+    startPress(e.clientX, e.clientY);
+  });
+  wrapper.addEventListener('pointermove',   e => movePress(e.clientX, e.clientY));
+  wrapper.addEventListener('pointerup',     cancelPress);
+  wrapper.addEventListener('pointercancel', cancelPress);
+  wrapper.addEventListener('pointerleave',  cancelPress);
+}
+
+// ============================================================
+// showItemActions / hideItemActions: abren y cierran el menu
+// contextual. En la apertura, capturamos snapshot del item para
+// soportar undo tras delete. En el cierre limpiamos flags si NO
+// fue delete (delete mantiene _actionItemSnapshot para el toast).
+// ============================================================
+function showItemActions(key, item) {
+  _actionItemKey = key;
+  if (!itemActionsPopupEl) return;
+  // Deep clone barato para undo (cliente-side; RTDB no necesita esto).
+  _actionItemSnapshot = item ? JSON.parse(JSON.stringify(item)) : null;
+  _actionInProgress   = false;
+  if (item.nota && itemActionsNameEl) itemActionsNameEl.textContent = item.nombre;
+  if (!item.nota && itemActionsNameEl) itemActionsNameEl.textContent = item.nombre;
+  // Title secundário con el nombre del item para contexto. Re-set
+  // siempre para evitar que quede el del item anterior.
+  if (itemActionsTitleEl) itemActionsTitleEl.textContent = 'Opciones';
+  if (itemActionsNameEl)  itemActionsNameEl.textContent  = item.nombre || '';
+  if (itemActionsEditBtnEl)   itemActionsEditBtnEl.disabled   = false;
+  if (itemActionsDeleteBtnEl) itemActionsDeleteBtnEl.disabled = false;
+  itemActionsPopupEl.classList.remove('hidden');
+  // N1 a11y: foco al primer focusable (close button). Defer al siguiente
+  // tick para que el .hidden=display-none se aplique primero.
+  setTimeout(() => {
+    if (itemActionsCloseEl) itemActionsCloseEl.focus({ preventScroll: true });
+  }, 0);
+  log('[item-actions] shown for', key, item.nombre);
+}
+
+function hideItemActions() {
+  if (itemActionsPopupEl) itemActionsPopupEl.classList.add('hidden');
+  _actionItemKey = null;
+  _actionInProgress = false;
+  // _actionItemSnapshot NO se limpia aquí: deleteItem lo necesita
+  // durante los 5s del toast undo. Se limpia en deleteItem() mismo
+  // o cuando se ejecuta el undo (que usa el snapshot y luego lo invalida).
+  log('[item-actions] hidden');
+}
+
+// ============================================================
+// openItemEdit: hace fresh get() del item desde RTDB (no usa el
+// snapshot stale capturado en long-press) por si otro cliente lo
+// cambio mientras el menu estaba abierto. Si el item ya no existe
+// (e.g. otro cliente lo borró en paralelo), cerramos el menu sin
+// abrir el edit popup.
+// ============================================================
+async function openItemEdit() {
+  const key = _actionItemKey;
+  hideItemActions();
+  if (!key || !itemEditPopupEl) return;
+  try {
+    const snapshot = await get(ref(db, 'items/' + key));
+    const item = snapshot.val();
+    if (!item) {
+      log('[item-edit] key ya no existe en RTDB:', key);
+      showToast('Este item ya no existe.', { type: 'info', duration: 2200 });
+      _actionItemKey = null;
+      return;
+    }
+    _actionItemSnapshot = item;   // fresh snapshot ahora para saveItemEdit
+    if (itemEditTitleEl) itemEditTitleEl.textContent = 'Editar item';
+    if (itemEditNameEl) {
+      itemEditNameEl.value = item.nombre || '';
+      setTimeout(() => { itemEditNameEl.focus(); itemEditNameEl.select(); }, 0);
+    }
+    if (itemEditNoteEl) itemEditNoteEl.value = item.nota || '';
+    itemEditPopupEl.classList.remove('hidden');
+    log('[item-edit] opened for', key, item.nombre);
+  } catch (err) {
+    logerr('[item-edit] get ERROR', err);
+    showToast('No pudimos abrir el editor.', { type: 'error' });
+  }
+}
+
+// ============================================================
+// saveItemEdit: valida nombre (1..80 chars no vacio) y nota
+// (<=200 chars opcional). Llama update() para tocar solo los
+// campos editables (preserva comprado + cualquier metadata futura
+// como addedBy/boughtBy cuando aterrice §1.B).
+// ============================================================
+async function saveItemEdit(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const key = _actionItemKey;
+  if (!key) { logerr('[item-edit] save sin _actionItemKey'); return; }
+  const nombre = (itemEditNameEl && itemEditNameEl.value || '').trim();
+  const nota   = (itemEditNoteEl && itemEditNoteEl.value  || '').trim();
+  if (!nombre) {
+    showToast('El nombre no puede estar vacío.', { type: 'error' });
+    if (itemEditNameEl) itemEditNameEl.focus();
+    return;
+  }
+  if (nombre.length > MAX_ITEM_NAME_LEN) {
+    showToast('El nombre es demasiado largo (máx ' + MAX_ITEM_NAME_LEN + ' caracteres).', { type: 'error' });
+    if (itemEditNameEl) itemEditNameEl.focus();
+    return;
+  }
+  if (nota.length > MAX_ITEM_NOTE_LEN) {
+    showToast('La nota es demasiado larga (máx ' + MAX_ITEM_NOTE_LEN + ' caracteres).', { type: 'error' });
+    if (itemEditNoteEl) itemEditNoteEl.focus();
+    return;
+  }
+  if (itemEditSaveBtnEl) itemEditSaveBtnEl.disabled = true;
+  if (itemEditCancelBtnEl) itemEditCancelBtnEl.disabled = true;
+  try {
+    // update() solo toca los campos indicados: preserva comprado + metadata.
+    // Si nota esta vacia, la borramos (null = delete field en RTDB).
+    const updates = { nombre };
+    updates.nota = nota || null;
+    await update(ref(db, 'items/' + key), updates);
+    log('[item-edit] save OK', key, { nombre, nota });
+    hideItemEditPopup();
+    showToast('Item actualizado.', { type: 'success', duration: 2200 });
+    _actionItemKey = null;
+    _actionItemSnapshot = null;
+  } catch (err) {
+    logerr('[item-edit] save ERROR', err && err.code, err && err.message);
+    showToast('No pudimos guardar los cambios.', { type: 'error' });
+  } finally {
+    if (itemEditSaveBtnEl) itemEditSaveBtnEl.disabled = false;
+    if (itemEditCancelBtnEl) itemEditCancelBtnEl.disabled = false;
+  }
+}
+
+function hideItemEditPopup() {
+  if (itemEditPopupEl) itemEditPopupEl.classList.add('hidden');
+  // Limpiar valores defensive (no leak data del item en el DOM).
+  if (itemEditNameEl) itemEditNameEl.value = '';
+  if (itemEditNoteEl) itemEditNoteEl.value = '';
+  _actionInProgress = false;
+}
+
+// ============================================================
+// deleteItem: borra el item y muestra toast con Undo. Snapshots
+// se capturan en showItemActions/openItemEdit (no aqui) para que
+// el snapshot sea independiente del contexto en que se abrio
+// el menu (delete sin edit previo funciona igual).
+// Undo: set() restaura el item en su key original. Si el user
+// hace undo despues de varios minutos, el snapshot puede no
+// ser valido si hubo conflictos; aqui asumimos que el user es
+// razonable y undo dentro de 5s resuelve accidental-delete.
+//
+// Error handling: PERMISSION_DENIED → toast + no clear snapshot
+// (asi el user puede reintentar). Otros errores → toast generico.
+// ============================================================
+async function deleteItem() {
+  const key = _actionItemKey;
+  const snapshot = _actionItemSnapshot;
+  if (!key) { logerr('[item-delete] delete sin _actionItemKey'); return; }
+  if (itemActionsDeleteBtnEl) itemActionsDeleteBtnEl.disabled = true;
+  if (itemActionsEditBtnEl)   itemActionsEditBtnEl.disabled   = true;
+  _actionInProgress = true;
+  try {
+    await remove(ref(db, 'items/' + key));
+    log('[item-delete] remove OK', key);
+    hideItemActions();
+    showToast('Item borrado.', {
+      type: 'info',
+      duration: 5000,
+      action: {
+        label: 'Deshacer',
+        callback: async () => {
+          if (!snapshot) {
+            logerr('[item-delete] undo sin snapshot');
+            return;
+          }
+          try {
+            // Re-construct: profilee preservando todos los campos.
+            // set() con la key original mantiene trazabilidad post-mortem
+            // (mismo push key que tenía el item antes del delete).
+            const payload = {
+              nombre:   snapshot.nombre   || '(sin nombre)',
+              comprado: !!snapshot.comprado,
+            };
+            if (snapshot.nota) payload.nota = snapshot.nota;
+            await set(ref(db, 'items/' + key), payload);
+            log('[item-delete] undo OK, restored', key);
+            showToast('Item restaurado.', { type: 'success', duration: 2200 });
+          } catch (undoErr) {
+            logerr('[item-delete] undo ERROR', undoErr && undoErr.code, undoErr && undoErr.message);
+            showToast('No pudimos restaurar el item.', { type: 'error' });
+          }
+        }
+      }
+    });
+    _actionItemSnapshot = null;   // ya consumida por el toast
+    _actionItemKey = null;
+  } catch (err) {
+    logerr('[item-delete] remove ERROR', err && err.code, err && err.message);
+    showToast('No pudimos borrar el item.', { type: 'error' });
+    _actionInProgress = false;
+    if (itemActionsDeleteBtnEl) itemActionsDeleteBtnEl.disabled = false;
+    if (itemActionsEditBtnEl)   itemActionsEditBtnEl.disabled   = false;
+  }
+}
+
+// ============================================================
 // Hamburger / drawer
 // ============================================================
 function openHamburger() {
@@ -704,8 +1037,9 @@ let _toastEl    = null;
 let _toastTimer = null;
 function showToast(message, opts) {
   const type     = (opts && opts.type)     || 'error';
-  const duration = (opts && opts.duration) || 5000;
-  log('[toast]', type, message);
+  const duration = (opts && opts.duration) || (type === 'error' ? 5000 : 2200);
+  const action   = (opts && opts.action)   || null;   // { label: 'Deshacer', callback: fn }
+  log('[toast]', type, message, action ? '(action)' : '');
 
   // Lazy-create container en <body> la primera vez.
   let container = document.getElementById('toast-container');
@@ -727,9 +1061,29 @@ function showToast(message, opts) {
     _toastEl = null;
   }
   _toastEl = document.createElement('div');
-  _toastEl.className = 'toast toast-' + type;
+  _toastEl.className = 'toast toast-' + type + (action ? ' toast-has-action' : '');
   _toastEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
-  _toastEl.textContent = message;
+  // Contenido: <span class="toast-message">{message}</span>[<button class="toast-action-btn">{action.label}</button>]
+  // Estructura flex: el message ocupa el espacio, el button se pega a la derecha.
+  const msgEl = document.createElement('span');
+  msgEl.className = 'toast-message';
+  msgEl.textContent = message;
+  _toastEl.appendChild(msgEl);
+  if (action && action.label) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action-btn';
+    btn.textContent = action.label;
+    btn.addEventListener('click', e => {
+      e.stopPropagation();   // evita que el dismissToast del wrapper se dispare (mantendria UX del propio unwire tap)
+      log('[toast] action click:', action.label);
+      try {
+        if (typeof action.callback === 'function') action.callback();
+      } catch (cbErr) { logerr('[toast] action callback ERROR', cbErr); }
+      dismissToast();
+    });
+    _toastEl.appendChild(btn);
+  }
   _toastEl.addEventListener('click', dismissToast);
   container.appendChild(_toastEl);
   requestAnimationFrame(() => _toastEl.classList.add('toast-visible'));
@@ -1111,11 +1465,20 @@ if (hamburgerBtnEl)      hamburgerBtnEl    .addEventListener('click', toggleHamb
 if (hamburgerBackdropEl) hamburgerBackdropEl.addEventListener('click', closeHamburger);
 if (hamburgerCloseBtnEl)  hamburgerCloseBtnEl .addEventListener('click', closeHamburger);
 document.addEventListener('click', e => {
-  if (!popupEl) return;
-  if (popupEl.classList.contains('hidden')) return;
-  if (!e.target.closest('.popup-content') && !e.target.closest('.popup-close')) {
-    log('[popup] click fuera del card -> cerrar');
-    popupEl.classList.add('hidden');
+  // Click-outside unificado para los 3 popups: nota, item-actions, item-edit.
+  // El usuario puede clickar el backdrop semitransparente (.popup) fuera del
+  // card para cerrar. NO se cierra con click en un child del popup-content.
+  const openPopups = [popupEl, itemActionsPopupEl, itemEditPopupEl];
+  for (const popEl of openPopups) {
+    if (!popEl || popEl.classList.contains('hidden')) continue;
+    if (!e.target.closest('.popup-content') && !e.target.closest('.popup-close')) {
+      log('[popup] click fuera del card -> cerrar', popEl.id);
+      popEl.classList.add('hidden');
+      // Si era el item-actions, limpiamos el state. Si era item-edit, tambien.
+      if (popEl === itemActionsPopupEl) { _actionItemKey = null; _actionInProgress = false; }
+      if (popEl === itemEditPopupEl)    { hideItemEditPopup(); }
+      break;   // solo cerramos el primer popup abierto (los demas ya estarían behind)
+    }
   }
 });
 // N1 a11y: focus trap Tab/Shift+Tab dentro del drawer abierto.
@@ -1153,6 +1516,21 @@ document.addEventListener('keydown', e => {
     closeHamburger();
     return;
   }
+  // Popups en orden de prioridad (los mas recientes/nested primero):
+  // item-edit y item-actions están sobre nota-popup porque el user los
+  // abre despues de interactuar con la lista, y el stacking visual
+  // sigue ese orden natural.
+  if (itemEditPopupEl && !itemEditPopupEl.classList.contains('hidden')) {
+    log('[item-edit] Escape -> cerrar');
+    hideItemEditPopup();
+    _actionItemKey = null;
+    return;
+  }
+  if (itemActionsPopupEl && !itemActionsPopupEl.classList.contains('hidden')) {
+    log('[item-actions] Escape -> cerrar');
+    hideItemActions();
+    return;
+  }
   if (popupEl && !popupEl.classList.contains('hidden')) {
     log('[popup] Escape -> cerrar');
     popupEl.classList.add('hidden');
@@ -1176,6 +1554,15 @@ const popupCloseEl = document.getElementById('popup-close');
 if (popupCloseEl) {
   popupCloseEl.addEventListener('click', () => { log('[popup] click X -> cerrarPopup'); cerrarPopup(); });
 } else { warn('[popup] no se encontro #popup-close'); }
+
+// Listeners de los popups nuevos (§1.D Control de items). Attach solo
+// si el nodo existe en DOM (defensa contra HTML incompleto en tests).
+if (itemActionsCloseEl)     itemActionsCloseEl.addEventListener('click',     hideItemActions);
+if (itemActionsEditBtnEl)   itemActionsEditBtnEl.addEventListener('click',   openItemEdit);
+if (itemActionsDeleteBtnEl) itemActionsDeleteBtnEl.addEventListener('click', deleteItem);
+if (itemEditCloseEl)        itemEditCloseEl.addEventListener('click',        hideItemEditPopup);
+if (itemEditCancelBtnEl)    itemEditCancelBtnEl.addEventListener('click',    hideItemEditPopup);
+if (itemEditFormEl)         itemEditFormEl.addEventListener('submit',         saveItemEdit);
 
 // ============================================================
 // Helpers

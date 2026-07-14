@@ -90,24 +90,28 @@
   - Atajos de teclado opcionales.
 - [ ] **Sheet de Ajustes** accesible desde la cabecera (modal o drawer).
 
-### 1.D — Control de items (editar / borrar) [PRIORIDAD 2026-07-13]
+### 1.D — Control de items (editar / borrar) [MAYORIA IMPLEMENTADA 2026-07-14]
 
 > Ahora que "Validar compra" archiva los items en `/shared/compras/`
 > (Fase 2.A), los users necesitan poder corregir errores SIN ensuciar
-> el historial. Hoy la unica forma de quitar un item es validando la
-> compra, lo cual crea una compra "fantasma" en el historial. Esta
-> seccion anade CRUD basico sobre items ANTES de §1.E Familias.
+> el historial. Esta seccion anade CRUD basico sobre items ANTES de
+> §1.E Familias. **Implementada el 2026-07-14** con long-press →
+> menu contextual (popup modal) + edit popup + delete con undo toast.
+> El drag-to-reorder (sensacion "playlists de Spotify") queda DEFERIDO
+> a §2.D por complejidad — ver el item explicativo alli abajo.
 
-- [ ] **Editar item**: click en el nombre (o doble-click desktop) → input editable inline. Guardar con Enter o blur. Cancelar con Escape (restaura el valor anterior).
-- [ ] **Borrar item**: icono 🗑️ al lado de cada item. Visible en hover desktop / siempre visible en mobile (target tactil). Confirmacion con dialog nativo (`confirm()`) o undo toast (preferible: toast con "Deshacer" por 5s).
-- [ ] **Restricciones de edicion**:
-  - Nombre: 1..80 chars (mismo cap que `database.rules.json`).
-  - Si el item esta `comprado: true`, se puede editar el nombre sin desmarcarlo.
-  - Si se edita la nota, el popup de notas sigue funcionando.
-- [ ] **RTDB rules**: ya validan `nombre` 1..80 chars en `/items/`. No hace falta cambiar rules.json (la validacion server-side ya cubre la edicion).
-- [ ] **Undo despues de borrar**: toast "Item borrado [Deshacer]" por 5s. El undo reactiva el item via `set()` con la data original (nombre, nota, comprado, addedBy si existe).
-- [ ] **Accesibilidad**: botones con `aria-label`, edit inline navegable con teclado (Tab/Shift+Tab/Enter/Escape), focus visible.
-- [ ] **Mobile**: iconos suficientemente grandes (min 44px target tactil Apple HIG), swipe-to-delete opcional como mejora futura.
+- [x] **Long-press menu contextual**: pulsar y mantener 500ms (estandar Android/iOS) sobre cualquier item abre un popup modal con dos acciones: [Editar] y [Eliminar]. Threshold de movimiento de 8px cancela el long-press para distinguirlo de scroll/zoom touch. Capture-phase click stopper (`{once: true, capture: true}` registrado dentro del timer) neutraliza el `click` secundario del release (click sobre notaIcon o cambio accidental del checkbox). _Implementado 2026-07-14._
+- [x] **Editar item** (popup modal): long-press → [Editar] abre un popup con 2 inputs separados (nombre obligatorio 1..80 chars, nota opcional 0..200 chars). `get(ref(db,'items/'+key))` fresh en cada apertura (no usa el snapshot stale del long-press) por si otro cliente edito el item mientras el menu estaba abierto. `update(ref db, {nombre, nota})` preserva `comprado` + metadata futura. Si nota vacia → `nota: null` borra el field en RTDB. Guardar con Enter o click en [Guardar]; cancelar con Escape. _Diferencia vs spec original: el spec 2026-07-13 decia "click o doble-click → input editable INLINE"; la version 2026-07-14 usa popup modal (mas visible, mejor UX en mobile, mas espacio para inputs de nombre+nota). Inline edit queda como mejora futura opcional — ver §1.D inline-edit._ _Implementado 2026-07-14._
+- [x] **Borrar item**: long-press → [Eliminar] ejecuta `remove(ref(db,'items/'+key))`. Sin confirm dialog. Toast flotante "Item borrado [Deshacer]" 5s (patron undo Material Design). Snapshot deep-cloned (`JSON.parse(JSON.stringify)`) en `showItemActions()` — delete sin edit previo funciona igual. _Diferencia vs spec original: el spec 2026-07-13 proponia "icono 🗑️ siempre visible"; descartado en favor de long-press (mas limpio visualmente, mejor discoverability mobile, mismo undo pattern). El 🗑️ inline queda como alternativa opcional en §1.D inline-edit._ _Implementado 2026-07-14._
+- [x] **Restricciones de edicion**:
+  - Nombre: 1..80 chars enforced client-side (mismo cap que `database.rules.json`).
+  - Nota: 0..200 chars (mas permisivo que el nombre).
+  - Si el item esta `comprado: true`, se puede editar el nombre sin desmarcarlo (no tocamos `comprado` en el `update`).
+- [x] **RTDB rules**: ya validan `nombre` 1..80 chars en `/items/` desde el deploy 2026-07-13. No hubo que tocar `database.rules.json` (la validacion server-side ya cubria la edicion).
+- [x] **Undo despues de borrar**: toast con action button "Deshacer" durante 5s. El undo via `set(ref db, snapshot)` restaura el item en su **push key original** (preserva trazabilidad post-mortem). Si el undo falla (e.g. PERMISSION_DENIED por token expirado) → toast error pero el delete original sigue effective.
+- [x] **Accesibilidad**: popups con `role=dialog`, ARIA labels en todos los botones (`aria-label="Editar este item"`, etc.), focus inicial en close button (item-actions) o name input (item-edit), Escape cierra ambos, click-outside cierra, focus se devuelve al item tras cerrar (via papa-back-button pattern). Botones de accion 48px+ target tactil. _Implementado 2026-07-14._
+- [x] **Mobile**: long-press (500ms) es mobile-first por definicion. Botones de accion 48px+ para tap comodo (44px Apple HIG cumplido). Popups centrados con max-width 92vw en <480px (no se cortan en portrait). Toast action button sin margin-left issues en <480px.
+- [ ] **Edicion inline (alternativa opcional)**: el long-press popup es la opcion primaria post-§1.D 2026-07-14. Una edicion inline (doble-click sobre label → input en sitio, sin popup) es una mejora futura para usuarios desktop que modifican muchos items a la vez. Estimado: ~80 LOC + manejo de blur/Enter/Escape. No bloqueante.
 
 ### 1.E — Familias (listas compartidas entre varias personas)
 
@@ -208,7 +212,14 @@
 
 - [ ] Atajos de teclado: `Cmd/Ctrl+K` (focus input), `Espacio` (marcar), `Cmd/Ctrl+Shift+Enter` (validar).
 - [ ] Edición inline (doble click sobre el nombre → input editable).
-- [ ] Drag & drop para reordenar items.
+- [ ] **Drag-to-reorder items** [DEFERIDO 2026-07-14 por complejidad]. **Por que es complejo**:
+  1. **Schema migration obligatoria**: RTDB JSON objects NO tienen orden implicito. Reordenar via DOM no persiste — cada `onValue` re-renderiza con el orden de push keys. Solución: añadir campo `sortIndex` (LexoHash fraccional o decimal inteligente) a cada item + reescribir el sortIndex en cada drag. Esto requiere `multipath update` a RTDB, no single-set.
+  2. **Touch event integration full-custom**: HTML5 drag-and-drop API esta roto en mobile (no dispara en touch). Hay que usar `pointer events` + mantener el ghost element durante el drag + hit-testing contra las otras filas para calcular la posicion de insercion + mantener la animacion visual del "ghost" (placeholder row que se mueve para indicar donde caera el item).
+  3. **Conflict resolution entre 2 usuarios**: si dos users arrastran items a la vez, sus sortIndex locales se solapan y el ultimo write gana (puede pisar al otro). Last-write-wins con un toast informativo "Otro usuario reordeno mientras tanto" es aceptable para ShopMate familiar. Soluciones serias (CRDT/OT) son overkill.
+  4. **Estimación**: ~300 LOC + refactor de `renderLista` (sort por sortIndex, no ya por push key time-order) + posible ajuste de scroll durante el drag (long listas + drag en mobile = jank si no hay momentum scrolling correcto).
+  5. **Dependencias**: logicamente pertenece a despues de §1.E Familias (cada familia tendra su propio orden). No bloqueante para uso actual; la lista funciona perfectamente con orden de push key (que ya es time-ordered = cronologico de inserción).
+  
+  Implementación futura cuando se justifique: sprint dedicada, posiblemente con un PR grande. Mientras tanto, los items aparecen en orden de adición.
 - [ ] Modo oscuro (integrado con el toggle de Ajustes 1.C).
 - [ ] Indicador "X usuarios conectados ahora" en cabecera (presencia).
 

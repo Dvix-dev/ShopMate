@@ -76,11 +76,71 @@
     </section>
   </aside>
 
-  <div id="nota-popup" class="popup hidden">
+  <div id="nota-popup" class="popup hidden" role="dialog" aria-modal="true" aria-labelledby="popup-titulo">
     <div class="popup-content">
       <div class="popup-close" id="popup-close">❌</div>
       <h3 id="popup-titulo"></h3>
       <p id="popup-nota"></p>
+    </div>
+  </div>
+
+  <!-- =============================================================
+       Item actions popup§1.D) — long-press sobre un item abre este
+       menu contextual con [Editar] y [Eliminar]. z-index 1000
+       (mismo que nota-popup; se cierran mutuamente). Estructura:
+         popup-content + body con title + 2 buttons stacked.
+       Mismas convenciones que nota-popup (.popup / .popup-content
+       / .popup-close) para reusar CSS sin duplicar.
+       ============================================================= -->
+  <div id="item-actions-popup" class="popup hidden" role="dialog" aria-modal="true" aria-labelledby="item-actions-title">
+    <div class="popup-content item-actions-content">
+      <div class="popup-close" id="item-actions-close" aria-label="Cerrar menú">❌</div>
+      <h3 id="item-actions-title" class="item-actions-title">Acciones del item</h3>
+      <p id="item-actions-name" class="item-actions-name">—</p>
+      <div class="item-actions-buttons">
+        <button type="button" id="item-actions-edit" class="item-action-btn item-action-edit" aria-label="Editar este item">
+          <span class="item-action-icon" aria-hidden="true">✏️</span>
+          <span class="item-action-label">Editar</span>
+        </button>
+        <button type="button" id="item-actions-delete" class="item-action-btn item-action-delete" aria-label="Eliminar este item">
+          <span class="item-action-icon" aria-hidden="true">🗑️</span>
+          <span class="item-action-label">Eliminar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============================================================
+       Item edit popup (§1.D) — al pulsar [Editar] en el contexto
+       menu. Form con 2 inputs (nombre + nota opcional). Save hace
+       update(ref db) y cierra el popup; cancel/close descartan.
+       ============================================================= -->
+  <div id="item-edit-popup" class="popup hidden" role="dialog" aria-modal="true" aria-labelledby="item-edit-title">
+    <div class="popup-content item-edit-content">
+      <div class="popup-close" id="item-edit-close" aria-label="Cerrar editor">❌</div>
+      <h3 id="item-edit-title" class="item-edit-title">Editar item</h3>
+      <form id="item-edit-form" class="item-edit-form" novalidate>
+        <label for="item-edit-name" class="modal-label">Nombre</label>
+        <input type="text" id="item-edit-name" name="name"
+               placeholder="Nombre del producto" required
+               maxlength="80"
+               autocomplete="off"
+               spellcheck="false" autocapitalize="off" />
+
+        <label for="item-edit-note" class="item-edit-note-label modal-label">Nota <span class="item-edit-note-optional">(opcional)</span></label>
+        <input type="text" id="item-edit-note" name="note"
+               placeholder="sin lactosa, tamaño grande, …"
+               maxlength="200"
+               autocomplete="off"
+               spellcheck="true" autocapitalize="off" />
+
+        <p class="item-edit-hint" id="item-edit-hint">Enter guarda · Escape cancela</p>
+
+        <div class="item-edit-actions">
+          <button type="button" id="item-edit-cancel" class="item-edit-cancel" aria-label="Cancelar edición">Cancelar</button>
+          <button type="submit" id="item-edit-save" class="item-edit-save" aria-label="Guardar cambios">Guardar</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -173,7 +233,7 @@
     </div>
   </div>
 
-  <!-- ?v=2 cache-bust: si vuelves a tocar app.js, bumpea la query string. -->
-  <script type="module" src="app.js?v=2"></script>
+  <!-- ?v=3 cache-bust: si vuelves a tocar app.js, bumpea la query string. -->
+  <script type="module" src="app.js?v=3"></script>
 </body>
 </html>
