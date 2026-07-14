@@ -1,5 +1,28 @@
 @import url(https://fonts.googleapis.com/css?family=Caveat:regular,500,600,700);
 
+/* Compatibilidad §1.D long-press: evita bubble de selección nativo
+   que interfiere con el context menu contextual. Excepción para inputs
+   para no romper copia/edición ni password managers. Ademas bloquea
+   el callout nativo de iOS (-webkit-touch-callout) y suprime el flash
+   gris de tap en Android (-webkit-tap-highlight-color). Usamos
+   :where() en el selector para forzar specificity 0 y que la regla
+   de excepción input/textarea aplicada DESPUES gane. */
+.list-item {
+  -webkit-tap-highlight-color: transparent;
+}
+:where(.list-item) * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+input, textarea, [contenteditable],
+.toast-message,
+#popup-nota,
+.hamburger-profile-email {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body {
   font-family: 'Poppins', sans-serif;
   background-color: #efefef;
