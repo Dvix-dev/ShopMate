@@ -36,9 +36,9 @@ import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase
 import { getDatabase, ref, onValue, push, update, remove, get, set, serverTimestamp, runTransaction, connectDatabaseEmulator } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
 import {
   getAuth, onAuthStateChanged,
-  sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail,
   signOut, connectAuthEmulator,
-  signInAnonymously, updateProfile,  // emulador: auto-sign-in "test" (sin email-link)
+  signInAnonymously, updateProfile,  // emulador: auto-sign-in "test" (sin contrasena)
 } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
 
 // Firebase config (externalizada) — loader transparente, ver ./firebase-config.js
@@ -62,11 +62,19 @@ const popupEl     = document.getElementById('nota-popup');
 const appContentEl    = document.getElementById('app-content');
 const authModalEl     = document.getElementById('auth-modal');
 const authFormEl      = document.getElementById('auth-form');
-const authEmailEl     = document.getElementById('auth-email');
-const authSendBtnEl   = document.getElementById('auth-send');
-const authCancelBtnEl = document.getElementById('auth-cancel');
-const authErrorEl     = document.getElementById('auth-error');
-const authMessageEl   = document.getElementById('auth-message');
+const authEmailEl           = document.getElementById('auth-email');
+const authPasswordEl        = document.getElementById('auth-password');
+const authPasswordConfirmEl = document.getElementById('auth-password-confirm');
+const authPasswordToggleEl  = document.getElementById('auth-password-toggle');
+const authModeToggleEl      = document.getElementById('auth-mode-toggle');
+const authForgotPasswordEl  = document.getElementById('auth-forgot-password');
+const authResetSentEl       = document.getElementById('auth-reset-sent');
+const authResetEmailEl      = document.getElementById('auth-reset-email');
+const authResetBackEl       = document.getElementById('auth-reset-back');
+const authHelpEl            = document.getElementById('auth-help');
+const authSendBtnEl         = document.getElementById('auth-send');
+const authErrorEl           = document.getElementById('auth-error');
+const authMessageEl         = document.getElementById('auth-message');
 // El email del usuario se muestra solo en el drawer (sección Perfil).
 // El header ya no muestra "Identificado como" (commit header-cleanup).
 // El boton logout del header ya no existe (commit refactor). El drawer
@@ -510,24 +518,72 @@ function toggleHamburger() {
 }
 
 // ============================================================
-// Auth (Fase 1.A)
+// Auth (Fase 1.A.v2) — migrado de passwordless (email-link) a
+// email + password. Motivo: la cuota Spark de Firebase Auth
+// (5 emails/día para sendSignInLinkToEmail) se quedaba corta
+// para el volumen de la familia. Con email/password los
+// SIGN-INS no consumen quota; los sign-ups pueden enviar email
+// de verificación, pero aquí NO lo enviamos (skip explícito).
+// ----------------------------------------------------
+// Decisiones de seguridad (apply here, NOT en cliente hashing):
+//   1) Passwords NUNCA se hashean en cliente. Firebase Auth los
+//      hashea server-side con scrypt + salt + pepper (auditado).
+//   2) Longitud mínima 8 chars enforced client-side + minlength=8
+//      en HTML5 (defense-in-depth).
+//   3) Anti-enumeración sign-IN: 'invalid-credential' colapsa
+//      user-no-existe + password-incorrecta en Firebase v9+.
+//   4) Anti-enumeración sign-UP: mensaje neutro para
+//      'email-already-in-use' (sin confirmar si el email existe).
+//   5) Inputs password se limpian (value='') tras submit OK y
+//      error, para no dejar contraseña en claro en el DOM.
+//   6) Submit se deshabilita durante la promesa Firebase para
+//      evitar doble-click → dos cuentas duplicadas.
+//   7) Show/hide password toggle es opt-in (👁/🙈), aria-pressed.
+//   8) RTDB rules NO cambian: siguen bloqueando con auth != null.
+// David DEBE hacer 1 click en Firebase Console para activarlo:
+//   Build > Authentication > Sign-in method > Email/Password
+//   (toggle verde). El toggle de Email-link (passwordless) puede
+//   quedar ACTIVO temporalmente para cuentas legacy (ya no se
+//   usa desde código; recomendable desactivarlo tras migración).
 // ============================================================
-const AUTH_STORAGE_EMAIL = 'shopmate:auth:email';
-const AUTH_MAX_AGE_MS    = 24 * 60 * 60 * 1000;
-function actionCodeSettings() {
-  return { url: window.location.origin + window.location.pathname, handleCodeInApp: true };
-}
+
+let currentAuthMode = 'signin'; // 'signin' | 'signup' | 'reset'
+const VALID_EMAIL_RE   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LEN = 8;
 const AUTH_ERROR_MAP = {
-  'auth/invalid-email':          'Email no valido. Revisalo e intentalo de nuevo.',
+  // Inputs no realizados
+  'auth/invalid-email':          'Email no válido. Revísalo e inténtalo de nuevo.',
   'auth/missing-email':          'Introduce tu email.',
-  'auth/quota-exceeded':         'Has superado la cuota diaria de envios de email (plan Spark gratuito de Firebase). Se resetea a medianoche (hora del Pacifico). Si necesitas mas volumen, actualiza a Blaze (pay-as-you-go) en Firebase Console.',
-  'auth/network-request-failed': 'Error de red. Comprueba tu conexion.',
-  'auth/missing-continue-uri':   'Config: anade este dominio a Authorized domains.',
-  'auth/unauthorized-continue-uri': 'Config: la URL de retorno no esta autorizada.',
-  'auth/invalid-action-code':    'El enlace ha expirado o ya se uso. Vuelve a pedir uno.',
-  'auth/expired-action-code':    'El enlace ha expirado. Vuelve a pedir uno.',
+
+  // Sign-in. 'invalid-credential' es el umbrella que Firebase v9+ usa
+  // para colapsar 'user-not-found' + 'wrong-password' (anti-enumeración
+  // server-side). 'invalid-password' queda como fallback histórico.
+  'auth/invalid-credential':     'Email o contraseña incorrectos.',
+  'auth/invalid-password':       'Contraseña incorrecta.',
+  'auth/user-disabled':          'Esta cuenta está deshabilitada. Contacta con David (admin del proyecto).',
+
+  // Sign-up
+  'auth/email-already-in-use':   'No pudimos crear la cuenta con ese email. Si ya tienes cuenta, usa el enlace inferior para iniciar sesión.',
+  'auth/weak-password':          'La contraseña es demasiado débil. Usa al menos 8 caracteres y mezcla mayúsculas, minúsculas y números.',
+
+  // Rate limit (Firebase server-side throttling)
+  'auth/too-many-requests':      'Demasiados intentos desde este dispositivo. Espera unos minutos e inténtalo de nuevo.',
+
+  // Red
+  'auth/network-request-failed': 'Error de red. Comprueba tu conexión.',
+
+  // Configuración (David debe arreglar)
+  'auth/operation-not-allowed':  'Config: el provider Email/Password no está habilitado en Firebase Console (Build > Authentication > Sign-in method > Email/Password).',
+  'auth/invalid-api-key':        'Config: la apiKey de Firebase no es válida. Revisa firebase-config.local.js.',
+  'auth/app-deleted':            'Config: el proyecto Firebase fue eliminado o está en mal estado.',
+
+  // Cuota (no aplicaría a sign-in/sign-up aquí, pero mapeamos por si
+  // David activa email verification en el futuro o re-añade passwordless)
+  'auth/quota-exceeded':         'Cuota diaria de Firebase Auth agotada. Considera upgrade a Blaze (pay-as-you-go) o espera a medianoche hora del Pacífico.',
 };
-function authErrorMessage(code) { return AUTH_ERROR_MAP[code] || ('Error desconocido (' + code + ').'); }
+function authErrorMessage(code) {
+  return AUTH_ERROR_MAP[code] || ('Error desconocido (' + (code || 'sin-codigo') + ').');
+}
 function requireAuth(label) {
   if (!auth || !auth.currentUser) { warn('[auth] accion bloqueada (sin user):', label); return false; }
   return true;
@@ -559,28 +615,69 @@ async function emulatorSignInTest() {
 }
 function showAuthView(state, opts) {
   if (!authModalEl || !authFormEl) return;
-  // Log con objeto (en vez de args sueltos) para evitar confusion tipo
-  // "[auth] showAuthView form undefined" cuando opts no se pasa.
   log('[auth] showAuthView', { state, opts });
-  authFormEl.classList.remove('hidden');
-  if (authErrorEl) { authErrorEl.classList.add('hidden'); authErrorEl.textContent = ''; }
+
+  // Limpiar mensajes residuales al cambiar de estado; el reset-sent block se oculta
+  // siempre y se re-muestra solo cuando entremos a 'reset-sent'.
+  if (authErrorEl)   { authErrorEl.classList.add('hidden');   authErrorEl.textContent = ''; }
   if (authMessageEl) authMessageEl.classList.add('hidden');
-  if (authCancelBtnEl) authCancelBtnEl.classList.add('hidden');
-  if (state === 'form') {
+  if (authResetSentEl) authResetSentEl.classList.add('hidden');
+
+  if (state === 'form-signin' || state === 'form-signup' || state === 'form-reset') {
+    // Reset mode -> el form se muestra pero password fields se ocultan via CSS por data-mode.
+    currentAuthMode = (state === 'form-signup') ? 'signup'
+                    : (state === 'form-reset') ? 'reset'
+                    : 'signin';
+    authFormEl.dataset.mode = currentAuthMode;
+    if (authHelpEl) {
+      const ds = authHelpEl.dataset;
+      if (currentAuthMode === 'reset')      authHelpEl.textContent = ds.textReset  || authHelpEl.textContent;
+      else if (currentAuthMode === 'signup') authHelpEl.textContent = ds.textSignup || authHelpEl.textContent;
+      else                                   authHelpEl.textContent = ds.textSignin || authHelpEl.textContent;
+    }
+    if (authSendBtnEl) {
+      authSendBtnEl.textContent = (currentAuthMode === 'reset') ? 'Enviar enlace de recuperación'
+                                 : (currentAuthMode === 'signup') ? 'Crear cuenta'
+                                 : 'Iniciar sesión';
+    }
+    if (authModeToggleEl) {
+      // En signin mode el toggle primario va a signup; en reset/signup va a signin.
+      authModeToggleEl.textContent = (currentAuthMode === 'signin')
+        ? '¿No tienes cuenta? Regístrate'
+        : '¿Ya tienes cuenta? Inicia sesión';
+    }
+    authFormEl.classList.remove('hidden');
     if (authEmailEl) { authEmailEl.value = (opts && opts.email) || ''; authEmailEl.focus(); }
-  } else if (state === 'sent') {
-    authFormEl.classList.add('hidden');
-    if (authCancelBtnEl) authCancelBtnEl.classList.remove('hidden');
-    if (authMessageEl) {
-      authMessageEl.classList.remove('hidden');
-      authMessageEl.textContent = 'Hemos enviado un enlace a ' + (opts && opts.email) + '. Abrelo desde este dispositivo para entrar.';
+    // Limpieza defensiva de passwords al mostrar el modal / cambiar modo.
+    if (authPasswordEl)        authPasswordEl.value = '';
+    if (authPasswordConfirmEl) authPasswordConfirmEl.value = '';
+    // Si la contraseña estaba visible (tipo text), la forzamos a password.
+    if (authPasswordEl && authPasswordEl.type !== 'password' && authPasswordToggleEl) {
+      authPasswordEl.type = 'password';
+      authPasswordToggleEl.setAttribute('aria-pressed', 'false');
+      authPasswordToggleEl.setAttribute('aria-label', 'Mostrar contraseña');
+      const iconSpan = authPasswordToggleEl.querySelector('.modal-password-toggle-icon');
+      if (iconSpan) iconSpan.textContent = '👁';
     }
   } else if (state === 'completing') {
+    // Spinner UX: ocultar form, mostrar message. 'completing' aplica a los 3 modos.
     authFormEl.classList.add('hidden');
     if (authMessageEl) {
       authMessageEl.classList.remove('hidden');
-      authMessageEl.textContent = 'Completando acceso...';
+      authMessageEl.textContent = (currentAuthMode === 'reset') ? 'Enviando enlace…'
+                                : (currentAuthMode === 'signup') ? 'Creando cuenta…'
+                                : 'Iniciando sesión…';
     }
+  } else if (state === 'reset-sent') {
+    // reset-sent block reemplaza el form. Mostramos email + botón 'Volver a iniciar sesión'.
+    authFormEl.classList.add('hidden');
+    if (authResetSentEl) {
+      authResetSentEl.classList.remove('hidden');
+      if (authResetEmailEl && opts && opts.email) authResetEmailEl.textContent = opts.email;
+      // Foco al back button para accesibilidad (a11y): user puede tabular al email después.
+      if (authResetBackEl) authResetBackEl.focus({ preventScroll: true });
+    }
+    log('[auth] reset-sent: email=', opts && opts.email);
   }
   authModalEl.classList.remove('hidden');
 }
@@ -595,51 +692,166 @@ function showAuthError(message) {
   if (!authErrorEl) { logerr('[auth] no #auth-error', message); return; }
   authErrorEl.textContent = message; authErrorEl.classList.remove('hidden');
 }
-function readStoredEmail() {
-  try {
-    const raw = localStorage.getItem(AUTH_STORAGE_EMAIL);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.email || !parsed.ts) return null;
-    if (Date.now() - parsed.ts > AUTH_MAX_AGE_MS) return null;
-    return parsed.email;
-  } catch (_e) { return null; }
-}
-function persistEmail(email) { try { localStorage.setItem(AUTH_STORAGE_EMAIL, JSON.stringify({ email, ts: Date.now() })); } catch (_e) {} }
-function clearStoredEmail() { try { localStorage.removeItem(AUTH_STORAGE_EMAIL); } catch (_e) {} }
-async function sendSignInLink(email) {
-  log('[auth] sendSignInLink', email);
+// ============================================================
+// submitAuth: handler del <form#auth-form>.
+// Valida client-side (formato email, longitud mínima, coincidencia
+// en signup) → llama Firebase → gestiona errores y feedback UX.
+// Al fallar, limpia campos password (defense-in-depth contra DOM
+// scraping) y re-muestra el form en el mismo modo para corregir.
+// NO loggea la contraseña. NO revela si el email existe en sign-up.
+// ============================================================
+async function submitAuth(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  // Dispatch por modo (signin|signup|reset). Reset salta la rama principal
+  // porque no pide password — solo email + sendPasswordResetEmail.
+  if (currentAuthMode === 'reset') {
+    return submitPasswordReset();
+  }
+  if (!authEmailEl || !authPasswordEl) return;
+  const email    = authEmailEl.value.trim();
+  const password = authPasswordEl.value;
+
+  if (!email) { showAuthError('Introduce tu email.'); authEmailEl.focus(); return; }
+  if (!VALID_EMAIL_RE.test(email)) { showAuthError('Formato de email no válido.'); authEmailEl.focus(); return; }
+  if (!password) { showAuthError('Introduce tu contraseña.'); authPasswordEl.focus(); return; }
+  if (password.length < MIN_PASSWORD_LEN) {
+    showAuthError('La contraseña debe tener al menos ' + MIN_PASSWORD_LEN + ' caracteres.');
+    authPasswordEl.focus();
+    return;
+  }
+  if (currentAuthMode === 'signup') {
+    const confirmVal = (authPasswordConfirmEl && authPasswordConfirmEl.value) || '';
+    if (!confirmVal) {
+      showAuthError('Repite la contraseña.');
+      if (authPasswordConfirmEl) authPasswordConfirmEl.focus();
+      return;
+    }
+    if (password !== confirmVal) {
+      showAuthError('Las contraseñas no coinciden.');
+      if (authPasswordConfirmEl) authPasswordConfirmEl.focus();
+      return;
+    }
+  }
   if (authSendBtnEl) authSendBtnEl.disabled = true;
-  try {
-    await sendSignInLinkToEmail(auth, email, actionCodeSettings());
-    persistEmail(email);
-    showAuthView('sent', { email });
-  } catch (err) {
-    logerr('[auth] sendSignInLink ERROR', err);
-    showAuthError(authErrorMessage(err && err.code));
-    showAuthView('form', { email });
-  } finally { if (authSendBtnEl) authSendBtnEl.disabled = false; }
-}
-async function completeSignInFromLink() {
-  if (!isSignInWithEmailLink(auth, window.location.href)) return false;
-  log('[auth] completeSignInFromLink');
   showAuthView('completing');
-  let email = readStoredEmail();
-  if (!email) {
-    email = window.prompt('Confirma tu email para completar el inicio de sesion:');
-    if (!email) { showAuthError('Necesitamos tu email.'); showAuthView('form'); return false; }
-  }
   try {
-    await signInWithEmailLink(auth, email, window.location.href);
-    log('[auth] signInWithEmailLink OK', email);
-    clearStoredEmail();
-    return true;
+    if (currentAuthMode === 'signup') {
+      log('[auth] createUserWithEmailAndPassword', email);
+      await createUserWithEmailAndPassword(auth, email, password);
+      log('[auth] signUp OK', email);
+    } else {
+      log('[auth] signInWithEmailAndPassword', email);
+      await signInWithEmailAndPassword(auth, email, password);
+      log('[auth] signIn OK', email);
+    }
+    // Defense-in-depth: clear passwords on success. El modal se cierra
+    // via hideAuthModal() pero los value siguen en el DOM hasta el
+    // siguiente showAuthView o handleLogout. Una extension maliciosa o
+    // un screen-sharing prolongado podrian leerlos.
+    if (authPasswordEl)        authPasswordEl.value = '';
+    if (authPasswordConfirmEl) authPasswordConfirmEl.value = '';
+    // OK: onAuthStateChanged re-disparará con user y cerrará el modal via hideAuthModal().
   } catch (err) {
-    logerr('[auth] signInWithEmailLink ERROR', err);
+    logerr('[auth] submitAuth ERROR', err && err.code);
     showAuthError(authErrorMessage(err && err.code));
-    showAuthView('form', { email });
-    return false;
+    // Re-mostrar el form en el mismo modo para corrección
+    showAuthView(currentAuthMode === 'signup' ? 'form-signup' : 'form-signin', { email });
+    // Defense-in-depth: clear passwords. Si el user mete la contraseña
+    // mal y mira el inspector, no querés que la vea persistente.
+    if (authPasswordEl)        authPasswordEl.value = '';
+    if (authPasswordConfirmEl) authPasswordConfirmEl.value = '';
+  } finally {
+    if (authSendBtnEl) authSendBtnEl.disabled = false;
   }
+}
+// ============================================================
+// toggleAuthMode: cambia entre Sign in y Sign up (en reset mode
+// vuelve a signin), conservando el email introducido. Limpia passwords
+// para no revelarlas entre modos.
+// ============================================================
+function toggleAuthMode() {
+  if (!authFormEl || !authEmailEl) return;
+  let newMode;
+  if (currentAuthMode === 'signin')      newMode = 'signup';
+  else if (currentAuthMode === 'signup') newMode = 'signin';
+  else /* reset */                       newMode = 'signin';
+  log('[auth] toggleAuthMode', { from: currentAuthMode, to: newMode });
+  showAuthView(newMode === 'signup' ? 'form-signup' : 'form-signin', { email: authEmailEl.value });
+}
+// ============================================================
+// enterResetMode: salta al state 'form-reset' desde signin mode.
+// Click viene del botón "¿Olvidaste tu contraseña?".
+// ============================================================
+function enterResetMode() {
+  if (!authEmailEl) return;
+  log('[auth] enterResetMode from', currentAuthMode);
+  showAuthView('form-reset', { email: authEmailEl.value });
+}
+// ============================================================
+// backFromResetSent: vuelve al state 'form-signin' desde el bloque
+// reset-sent. Click viene del botón "Volver a iniciar sesión".
+// ============================================================
+function backFromResetSent() {
+  log('[auth] backFromResetSent');
+  showAuthView('form-signin');
+}
+// ============================================================
+// submitPasswordReset: handler del <form#auth-form> en reset mode.
+// Solo valida email (formato) y llama sendPasswordResetEmail.
+// En Firebase v9+ la API ya NO lanza auth/user-not-found para emails
+// desconocidos (responde exito silencioso para anti-enumeración),
+// por lo que llegamos casi siempre al bloque 'reset-sent'.
+// Errores que si pueden salir: invalid-email, missing-email,
+// network-request-failed, too-many-requests, quota-exceeded y los de
+// configuracion (operation-not-allowed, invalid-api-key).
+// ============================================================
+async function submitPasswordReset() {
+  if (!authEmailEl) return;
+  const email = authEmailEl.value.trim();
+  if (!email) { showAuthError('Introduce tu email.'); authEmailEl.focus(); return; }
+  if (!VALID_EMAIL_RE.test(email)) {
+    showAuthError('Formato de email no válido.');
+    authEmailEl.focus();
+    return;
+  }
+  if (authSendBtnEl) authSendBtnEl.disabled = true;
+  showAuthView('completing');
+  try {
+    log('[auth] sendPasswordResetEmail', email);
+    await sendPasswordResetEmail(auth, email);
+    log('[auth] passwordResetEmail OK', email);
+    // Anti-enumeración: Firebase v9+ devuelve exito aunque el email no exista.
+    // Mostramos reset-sent para ambos casos (existe o no). Buena práctica de
+    // privacidad: NO revelar si el email está registrado.
+    showAuthView('reset-sent', { email });
+  } catch (err) {
+    logerr('[auth] passwordResetEmail ERROR', err && err.code);
+    showAuthError(authErrorMessage(err && err.code));
+    showAuthView('form-reset', { email });
+  } finally {
+    if (authSendBtnEl) authSendBtnEl.disabled = false;
+  }
+}
+// ============================================================
+// togglePasswordVisibility: muestra / oculta el campo password.
+// Default masked (type=password). Click cambia a text y al revés.
+// aria-pressed accesible, sin riesgo de leakage a screen readers.
+// ============================================================
+function togglePasswordVisibility() {
+  if (!authPasswordEl || !authPasswordToggleEl) return;
+  const isShown = authPasswordEl.type === 'text';
+  if (isShown) {
+    authPasswordEl.type = 'password';
+    authPasswordToggleEl.setAttribute('aria-pressed', 'false');
+    authPasswordToggleEl.setAttribute('aria-label', 'Mostrar contraseña');
+  } else {
+    authPasswordEl.type = 'text';
+    authPasswordToggleEl.setAttribute('aria-pressed', 'true');
+    authPasswordToggleEl.setAttribute('aria-label', 'Ocultar contraseña');
+  }
+  const iconSpan = authPasswordToggleEl.querySelector('.modal-password-toggle-icon');
+  if (iconSpan) iconSpan.textContent = isShown ? '👁' : '🙈';
+  authPasswordEl.focus();
 }
 async function handleLogout() {
   log('[auth] handleLogout click');
@@ -647,33 +859,34 @@ async function handleLogout() {
   try {
     await signOut(auth);
     log('[auth] signOut OK');
-    clearStoredEmail();
-    // Safety net post-logout (mobile 2026-07-13): si
-    // onAuthStateChanged no re-dispara con user=null en 1.5s
-    // (Firebase Auth lento en mobile tras signOut), forzamos
-    // la auth modal para que el usuario no se quede sin login
-    // tras un logout "invisible" (menu cierra pero modal no sale).
+    // (Antes clearStoredEmail() — ya no aplica: ya no usamos localStorage para email.)
+    // Limpieza defensiva del DOM: si quedó algo en los campos, lo vaciamos.
+    if (authPasswordEl)        authPasswordEl.value = '';
+    if (authPasswordConfirmEl) authPasswordConfirmEl.value = '';
+    // Safety net post-logout (mobile 2026-07-13): si Firebase Auth no
+    // re-dispara onAuthStateChanged con user=null en 1.5s, forzamos
+    // manualmente la auth modal.
     setTimeout(() => {
       if (authModalEl && authModalEl.classList.contains('hidden')) {
         logerr('[auth] onAuthStateChanged no disparo tras signOut, forzando auth modal');
-        showAuthView('form');
+        showAuthView('form-signin');
       }
     }, 1500);
   }
-  catch (err) { logerr('[auth] signOut ERROR', err); showAuthError('No pudimos cerrar sesion.'); }
+  catch (err) { logerr('[auth] signOut ERROR', err); showAuthError('No pudimos cerrar sesión.'); }
 }
 if (authFormEl && authEmailEl) {
-  authFormEl.addEventListener('submit', e => {
-    e.preventDefault();
-    const raw = authEmailEl.value.trim();
-    if (!raw) { showAuthError('Introduce un email.'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) { showAuthError('Formato de email no valido.'); return; }
-    sendSignInLink(raw);
-  });
+  // Antes: authPasswordEl también se requería para el dispatch (no es estrictamente
+  // necesario en reset mode, pero el dispatch interno lo evita). Mantenemos el
+  // requisito mínimo: form + email. submitAuth valida internamente.
+  authFormEl.addEventListener('submit', submitAuth);
 }
-if (authCancelBtnEl) authCancelBtnEl.addEventListener('click', () => { clearStoredEmail(); showAuthView('form'); });
-if (logoutBtnEl) logoutBtnEl.addEventListener('click', handleLogout);
-if (menuLogoutBtnEl) menuLogoutBtnEl.addEventListener('click', handleLogout);
+if (authModeToggleEl)     authModeToggleEl.addEventListener('click', toggleAuthMode);
+if (authForgotPasswordEl) authForgotPasswordEl.addEventListener('click', enterResetMode);
+if (authResetBackEl)      authResetBackEl.addEventListener('click', backFromResetSent);
+if (authPasswordToggleEl && authPasswordEl) authPasswordToggleEl.addEventListener('click', togglePasswordVisibility);
+if (logoutBtnEl)          logoutBtnEl.addEventListener('click', handleLogout);
+if (menuLogoutBtnEl)      menuLogoutBtnEl.addEventListener('click', handleLogout);
 onAuthStateChanged(auth, async user => {
   authStateResolved = true;
   clearTimeout(authFallbackTimer);
@@ -713,12 +926,12 @@ onAuthStateChanged(auth, async user => {
         const ok = await emulatorSignInTest();
         if (ok) return; // onAuthStateChanged re-disparara con user
       }
-      const completed = await completeSignInFromLink();
-      if (!completed) showAuthView('form');
+      // Email/password: el único punto de entrada es el modal en sign-in mode.
+      showAuthView('form-signin');
     }
   } catch (err) {
     logerr('[auth] onAuthStateChanged ERROR', err);
-    if (!user) showAuthView('form');
+    if (!user) showAuthView('form-signin');
   }
 });
 
@@ -779,7 +992,7 @@ const authFallbackTimer = setTimeout(() => {
       return;
     }
     logerr('[auth] onAuthStateChanged no disparo en 5s, forzando auth modal');
-    showAuthView('form');
+    showAuthView('form-signin');
   }
 }, 5000);
 
@@ -800,7 +1013,7 @@ function subscribeItems() {
     // aqui para que el usuario pueda re-autenticarse.
     if (err && err.code === 'PERMISSION_DENIED') {
       logerr('[auth] onValue /items PERMISSION_DENIED, forzando auth modal');
-      showAuthView('form');
+      showAuthView('form-signin');
     }
   });
 }
@@ -817,7 +1030,7 @@ function subscribeCompras() {
     logerr('[firebase] onValue /shared/compras', err);
     if (err && err.code === 'PERMISSION_DENIED') {
       logerr('[auth] onValue /shared/compras PERMISSION_DENIED, forzando auth modal');
-      showAuthView('form');
+      showAuthView('form-signin');
     }
   });
 }
@@ -885,14 +1098,14 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (authModalEl && !authModalEl.classList.contains('hidden')) {
-    const formVisible   = authFormEl && !authFormEl.classList.contains('hidden');
-    const cancelVisible = authCancelBtnEl && !authCancelBtnEl.classList.contains('hidden');
+    const formVisible = authFormEl && !authFormEl.classList.contains('hidden');
     if (formVisible && authEmailEl) {
       authEmailEl.focus();
       log('[auth] Escape -> focus email input');
-    } else if (cancelVisible) {
-      log('[auth] Escape -> cancelar envio');
-      authCancelBtnEl.click();
+    } else if (authResetSentEl && !authResetSentEl.classList.contains('hidden') && authResetBackEl) {
+      // reset-sent state: foco al back button para keyboard a11y.
+      authResetBackEl.focus();
+      log('[auth] Escape -> focus reset-back button');
     } else {
       log('[auth] Escape ignorado en completing');
     }

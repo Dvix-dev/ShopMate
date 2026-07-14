@@ -68,7 +68,7 @@ mv list.html index.html
 - 🎨 **Diseño responsivo** con tipografías modernas (Poppins + Caveat).
 - 🌐 **Despliegue por SFTP** automático al guardar (VS Code).
 - 🔒 **Configuración externalizada**: las claves de Firebase NO viajan en el repo.
-- 🔐 **Identifícate (Fase 1.A)**: autenticación passwordless por email-link. Modal fullscreen bloqueante hasta completar el login (sin contraseñas — solo un click en el email). Sesión persistida automáticamente; botón "Salir" en cabecera.
+- 🔐 **Identifícate (Fase 1.A.v2)**: autenticación email + password. Modal fullscreen con campos email + contraseña + botón submit. Toggle Sign in ↔ Sign up. **Botón "¿Olvidaste tu contraseña?"** (solo visible en signin mode) lanza el flujo de password reset vía `sendPasswordResetEmail` (1 email por reset, sin impactar quota del plan Spark). Botón 👁 para mostrar/ocultar contraseña. Sesión persistida automáticamente; cerrar sesión desde el menú ☰ de la cabecera (sección "Sesión"). Passwords hasheados server-side (Firebase Auth scrypt + salt + pepper; nunca en cliente). Migrado desde passwordless (email-link) el 2026-07-14 porque la cuota Spark (5 emails/día para `sendSignInLinkToEmail`) era insuficiente.
 - 🐞 **Debug opcional**: `localStorage.setItem('shopmate:debug','0')` silencia los `console.log` de `app.js` (útil en producción).
 - 📝 **Notas en items**: añade `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa" (popup al pulsar el icono 📝).
 - 🧪 **Aislamiento dev/prod**: `dev-isolation.txt` documenta el uso del emulador local (RTDB + Auth + UI) sin tocar la nube prod. Único camino soportado actualmente (los métodos "proyecto paralelo" y "staging SFTP" fueron retirados en commit `ff37025`).
@@ -89,7 +89,7 @@ mv list.html index.html
 | Persistencia | Firebase Realtime Database |
 | Hosting | Servidor propio vía SFTP (`158.179.223.22`) |
 | Configuración | `firebase-config.local.js` gitignored + `.env.example` |
-| Autenticación | Firebase Authentication email-link magic-link (passwordless, **activa** desde Fase 1.A) |
+| Autenticación | Firebase Authentication email + password (Email/Password provider, **activo** desde Fase 1.A.v2). Passwords hasheados server-side (scrypt + salt + pepper); nunca en cliente. |
 
 > No se usa ningún framework, bundler ni gestor de paquetes. Todo se ejecuta directamente en el navegador.
 
@@ -287,7 +287,7 @@ El despliegue está automatizado mediante la extensión **SFTP** de VS Code usan
    - Soporta notas opcionales: `Leche (sin lactosa)` → nombre "Leche", nota "sin lactosa".
 4. Cada producto aparece con un checkbox grande · pulsa para marcarlo como comprado.
 5. Cuando termines la compra, pulsa **Validar compra ✔** para borrar los productos ya comprados.
-6. Cualquier persona **autenticada** verá los cambios al instante. Si abres la app sin sesión, el modal "Identifícate" bloquea el UI hasta enviar y pulsar el enlace del correo.
+6. Cualquier persona **autenticada** verá los cambios al instante. Si abres la app sin sesión, el modal "Identifícate" bloquea el UI hasta que inicies sesión (email + contraseña). Si todavía no tienes cuenta, el botón inferior del modal te permite crear una. Si olvidaste tu contraseña, hay un segundo botón pequeño ("¿Olvidaste tu contraseña?") que envía un email de recuperación a tu cuenta. Los tres modos coexisten en el mismo modal.
 
 ---
 
@@ -372,6 +372,9 @@ Colección Firebase RTDB: **`items`**
 | 403 al subir vía SFTP | Clave SSH caducada | Renovar clave y actualizar `privateKeyPath` |
 | Estilos CSS no cargan | Ruta incorrecta a `main.css` | Verificar `<link>` en `index.html` |
 | Drawer del menú no se cierra en mobile | Drawer a 88vw cubría el botón ☰ y backdrop demasiado estrecho para tap | HECHO 2026-07-13: botón ✕ cerrar (44px) dentro del drawer, header sticky, drawer a 82vw en <480px |
+| Modal auth devuelve `auth/operation-not-allowed` | El provider Email/Password no está habilitado en Firebase Console | **HECHO 2026-07-14**: en migración a email/password. 1 click en Build > Authentication > Sign-in method > Email/Password (toggle verde). Si cambia el código o Firebase Console, basta reactivarlo. |
+| Modal auth devuelve `auth/invalid-credential` repetidamente | Email o contraseña incorrectos. Si la cuenta es nueva, primero usa Sign up (toggle inferior del modal). | Mensaje neutro anti-enumeración. Si olvidaste la contraseña, pulsa "¿Olvidaste tu contraseña?" (botón inferior del modal) y Firebase te envía un email de recuperación (no necesitas contactar a David). |
+| Login falla tras varios intentos con `auth/too-many-requests` | Firebase rate-limiter activado (muchos intentos desde tu IP/dispositivo) | Espera unos minutos. No spamees el botón (la app ya lo deshabilita durante el submit). |
 
 ---
 

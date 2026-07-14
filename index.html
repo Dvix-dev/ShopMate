@@ -87,19 +87,70 @@
   <div id="auth-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="auth-title" aria-describedby="auth-help">
     <div class="modal-card">
       <h3 id="auth-title">Identifícate</h3>
-      <p id="auth-help" class="modal-help">Te enviaremos un enlace a tu correo para iniciar sesión. Sin contraseñas: solo un click en el email.</p>
+      <p id="auth-help" class="modal-help"
+         data-text-signin="Inicia sesión con tu correo y contraseña."
+         data-text-signup="Crea una cuenta nueva (mínimo 8 caracteres). Tu contraseña se almacena cifrada por Firebase; nunca la vemos ni la enviamos por email."
+         data-text-reset="Te enviaremos un enlace para restablecer tu contraseña. Si no la recuerdas, este es el camino.">Inicia sesión con tu correo y contraseña.</p>
 
-      <form id="auth-form" novalidate>
+      <form id="auth-form" data-mode="signin" novalidate>
         <label for="auth-email" class="modal-label">Tu correo</label>
         <input type="email" id="auth-email" name="email"
                placeholder="ejemplo@correo.com" required
                autocomplete="email" inputmode="email"
                spellcheck="false" autocapitalize="off" />
-        <div class="modal-actions">
-          <button type="button" id="auth-cancel" class="hidden">Cancelar</button>
-          <button type="submit" id="auth-send">Enviar enlace</button>
+
+        <label for="auth-password" class="modal-label">Contraseña</label>
+        <div class="modal-password-wrapper">
+          <input type="password" id="auth-password" name="password"
+                 placeholder="Mínimo 8 caracteres" required
+                 minlength="8"
+                 autocomplete="current-password"
+                 spellcheck="false" autocapitalize="off" />
+          <button type="button" id="auth-password-toggle"
+                  class="modal-password-toggle"
+                  aria-label="Mostrar contraseña"
+                  aria-pressed="false">
+            <span class="modal-password-toggle-icon" aria-hidden="true">👁</span>
+          </button>
         </div>
+
+        <div class="modal-confirm-group" hidden>
+          <label for="auth-password-confirm" class="modal-label">Repetir contraseña</label>
+          <div class="modal-password-wrapper">
+            <input type="password" id="auth-password-confirm" name="password-confirm"
+                   placeholder="Repite la contraseña" required
+                   minlength="8"
+                   autocomplete="new-password"
+                   spellcheck="false" autocapitalize="off" />
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="submit" id="auth-send">Iniciar sesión</button>
+        </div>
+        <button type="button" id="auth-mode-toggle"
+                class="modal-mode-toggle"
+                aria-label="Cambiar entre iniciar sesión y crear cuenta">
+          ¿No tienes cuenta? Regístrate
+        </button>
+        <button type="button" id="auth-forgot-password"
+                class="modal-mode-toggle modal-forgot-link"
+                aria-label="Recuperar contraseña por email">
+          ¿Olvidaste tu contraseña?
+        </button>
       </form>
+
+      <!-- Bloque de confirmación tras enviar reset (visible solo en state='reset-sent'). -->
+      <div id="auth-reset-sent" class="modal-reset-sent hidden" role="status" aria-live="polite">
+        <h4 class="modal-reset-sent-title">Revisa tu correo</h4>
+        <p>Te hemos enviado un enlace de recuperación a <strong id="auth-reset-email">tu correo</strong>.</p>
+        <p>Ábrelo desde este dispositivo y sigue las instrucciones para restablecer tu contraseña. Si no lo ves, revisa la carpeta de spam.</p>
+        <button type="button" id="auth-reset-back"
+                class="modal-mode-toggle"
+                aria-label="Volver a la pantalla de inicio de sesión">
+          Volver a iniciar sesión
+        </button>
+      </div>
 
       <div id="auth-error" class="modal-error hidden" role="alert" aria-live="polite"></div>
       <div id="auth-message" class="modal-message hidden" role="status" aria-live="polite"></div>

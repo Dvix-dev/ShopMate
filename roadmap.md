@@ -38,23 +38,29 @@
 
 > Estos pasos se ejecutan UNA vez desde Firebase Console con tu cuenta Google antes de poder usar el flujo de Email-link. Sin ellos, el código commiteado queda funcional pero el flujo end-to-end (envío real de emails a tu correo) NO arranca.
 
-- [x] **Habilitar Email-link (passwordless)**: `Build > Authentication > Sign-in method > Email/Password` → activar el toggle **Email link (passwordless)**. Provider debe quedar Enabled. _Verificado 2026-07-13: E2E completo (envío de magic link a David OK)_.
+- [x] **Habilitar Email/Password provider**: `Build > Authentication > Sign-in method > Email/Password` → toggle **Email/Password** en Enabled. _Cambiado 2026-07-14: migrado desde Email-link (passwordless) porque los 5 emails/día de Spark eran insuficientes. Ya verificado: David habilitado y funcionando._ ⚠️ Es CRÍTICO: si el provider NO está habilitado, la app lanza `auth/operation-not-allowed` en cualquier sign-in/sign-up.
 - [x] **Authorized domains**: en la misma pestaña, sección **Authorized domains**. _E2E validado el 2026-07-13 en el dominio prod real de David (Firebase Console acepta el que esté en la lista). Los recomendados por defecto:_
   - `localhost` — para desarrollo local (con `python -m http.server 8080`).
   - `158.179.223.22` — IP del servidor prod Ubuntu (o el dominio real que uses; Firebase maneja IPs pero muestra warning — un dominio propio es preferible; letsencrypt en §Seguridad).
   - `shopmate-e9195.firebaseapp.com` — ya viene por defecto.
-- [ ] **(Opcional) Personalizar plantilla de email**: `Templates > Email link` → editar subject y cuerpo. **FROM sigue siendo `noreply@shopmate-e9195.firebaseapp.com`** (no personalizable sin plan Blaze).
-- [ ] **Quota**:Spark (gratis) tiene tope diario de emails. Si la familia dispara muchos `signInWithEmailLink`, puede saltar `auth/quota-exceeded`. Considerar Blaze si esto se vuelve problemático.
+- [ ] **(Opcional, recomendado) Desactivar Email-link (passwordless)**: ya no se usa desde código. Mantenerlo enabled consume usuarios-passwordless residuales y puede confundir a David (que pensaba haberlo deshabilitado). Si tienes cuentas legacy con magic-link, primero migralas o déjalas enabled hasta que confirmes que ninguna sesion activa lo necesita. _Acceso: misma pantalla, toggle Email link (passwordless) → Disabled._
+- [ ] **Quota ya no es problema para sign-ins**: con email/password, los SIGN-INS NO consumen quota de email. Solo sign-ups y password-resets lo harían. Si David quiere añadir password-reset o espera un boom de nuevos users, considerar Blaze nuevamente.
 
 ### 1.A — Autenticación (foundation)
 
-- [x] **Activar Firebase Authentication** en Firebase Console → *Sign-in method* → **Email link (passwordless)**. _Bloqueado por §1.A.0._
-- [x] **Ajustar RTDB rules** para exigir `auth != null` (`.read`/`write` solo a usuarios autenticados). El item legacy `rules` en `database.rules.json` se actualiza con `auth != null` en lugar de `true` abierto. _Commits: `f7e327f` feat(auth) + `d5cec7d` chore(rules)._
-- [x] **UI: pantalla Identifícate**: input email + botón "Enviar enlace". El enviar dispara `sendSignInLinkToEmail`. _Modal fullscreen bloqueante en commit `f7e327f`._
-- [x] **Completar sign-in**: al clicar el enlace del correo, validar y guardar sesión local (`localStorage` con expiración 24h). _Misma sesión también persistida vía IndexedDB por Firebase (no requiere acción manual del usuario)._
-- [x] **Logout** desde cabecera (botón "Salir"). _Mismo commit `f7e327f`._
+- [x] **Activar Firebase Authentication** en Firebase Console → *Sign-in method* → **Email/Password**. _Bloqueado por §1.A.0._. _Refactorizado el 2026-07-14: migrado desde Email-link (passwordless) a email/password para escapar la cuota Spark (5 emails/día) que era insuficiente. Passwords hasheados server-side (scrypt + salt + pepper); nada se hashea en cliente._
+- [x] **Ajustar RTDB rules** para exigir `auth != null` (`.read`/`write` solo a usuarios autenticados). El item legacy `rules` en `database.rules.json` se actualiza con `auth != null` en lugar de `true` abierto. _Commits: `f7e327f` feat(auth) + `d5cec7d` chore(rules)._ (las reglas NO necesitaron tocarse tras la migración email-link→email/password: siguen basándose en `auth != null`).
+- [x] **UI: pantalla Identifícate** con email + password + botón submit. Toggle Sign in ↔ Sign up (mismo modal). Botón 👁 show/hide en el password. _Modal fullscreen bloqueante desde commit `f7e327f`; refactorizado a email/password el 2026-07-14 (commit `feat(auth): email/password` pendiente)._
+- [x] **Validación client-side**: formato email (regex), longitud mínima 8 chars (en JS + `minlength` HTML5), coincidencia entre password y confirm en sign-up. Submit deshabilitado durante la promesa Firebase (defense anti-doble-click).
+- [x] **Mensajes de error user-friendly en español** vía `AUTH_ERROR_MAP`: `invalid-credential` (anti-enumeración colapsa email-no-existe + password-incorrecta), `email-already-in-use` (mensaje neutro anti-enumeración sign-up), `weak-password`, `too-many-requests`, `operation-not-allowed`, etc. NO se loggea la contraseña.
+- [x] **Logout** desde el menú ☰ lateral (botón "Cerrar sesión"). _Mismo commit `f7e327f` original; refactorizado al drawer._
+- [x] **Password reset flow**: ¿Olvidaste tu contraseña? → nuevo state `form-reset` del modal auth. Solo pide email; oculta password field. Submit dispara `sendPasswordResetEmail(auth, email)`; en Firebase v9+ la API Devuelve éxito silenciosamente aunque el email no exista (anti-enumeración server-side). Tras éxito, muestra bloque `reset-sent` con el email y botón "Volver a iniciar sesión". Mapeo de errores: `auth/invalid-email`, `auth/missing-email`, `auth/too-many-requests`, `auth/network-request-failed`, `auth/quota-exceeded`, `auth/operation-not-allowed`. **Coste**: 1 email por reset; para tu uso familiar esto es despreciable vs Spark. _Implementado 2026-07-14 (commit `feat(auth): password reset via sendPasswordResetEmail` pendiente)._
 
-> ✅ **Fase 1.A cerrada el 2026-07-13**. Commits commiteados + push a `origin/main` (`f7e327f` feat, `d5cec7d` rules, `6c488d3`+`ff37025`+`193aaa6`+`3cbebb7`+`4211d5b` docs/dev). Reglas endurecidas desplegadas a Firebase prod con la cuenta Owner correcta. E2E end-to-end validado (David recibió magic link → click → app autenticada → lista renderizada). NO hay pasos pendientes relativos a §1.A; las secciones §1.B, §1.C y §1.D siguen abiertas.
+**Password reset flow**:
+- [x] Nueva pestana/toggle en el modal "¿Olvidaste tu contraseña?". Lanza `sendPasswordResetEmail` (1 email por reset; despreciable vs cuota Spark). Mapeo de errores contextuales con mensajes neutrales.
+- [x] Anti-enumeración: el bloque `reset-sent` se muestra tanto si el email existe como si no (Firebase v9+ ya responde success al email ficticio). No se revela la existencia de la cuenta.
+
+> ✅ **Fase 1.A cerrada el 2026-07-13 (passwordless inicial); refactorizada a email/password y ampliada con password reset el 2026-07-14**. Commits originales + push a `origin/main` (`f7e327f` feat, `d5cec7d` rules, `6c488d3`+`ff37025`+`193aaa6`+`3cbebb7`+`4211d5b` docs/dev). Refactor + reset pendientes de commit. Reglas endurecidas desplegadas a Firebase prod con la cuenta Owner correcta. E2E end-tooped validado para passwordless (David recibió magic link → click → app autenticada → lista renderizada). Migración a email/password + reset pendiente de E2E smoke en prod.
 
 ### 1.B — Perfiles de usuario
 
