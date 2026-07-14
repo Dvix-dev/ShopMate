@@ -688,9 +688,70 @@ function showAppContent() {
 function hideAppContent() {
   if (appContentEl) { appContentEl.classList.add('hidden'); appContentEl.style.display = 'none'; }
 }
+// ============================================================
+// showToast: feedback flotante (top viewport, encima del modal)
+// con auto-dismiss 5s + tap-to-dismiss. Usado por showAuthError
+// en vez del inline error div que tenia antes, porque en mobile
+// el teclado virtual tapa los mensajes bajo el form.
+// Container unico (lazy-created): si entra un nuevo toast antes
+// de salir el anterior, REUTILIZA el mismo nodo (actualiza texto
+// y resetea timer); no se apilan. ARIA: role=alert + aria-live=
+// assertive para errores (intrusivos); role=status + aria-live=
+// polite para info/success. Position fixed top con env(safe-
+// area-inset-top) para notched devices (iPhone X+).
+// ============================================================
+let _toastEl    = null;
+let _toastTimer = null;
+function showToast(message, opts) {
+  const type     = (opts && opts.type)     || 'error';
+  const duration = (opts && opts.duration) || 5000;
+  log('[toast]', type, message);
+
+  // Lazy-create container en <body> la primera vez.
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    container.setAttribute('aria-live', 'polite');
+    document.body.appendChild(container);
+  }
+  // Reutilizamos el mismo nodo en lugar de apilar multiples toasts.
+  // Si hay un toast anterior (visible o leaving), lo quitamos del DOM YA
+  // para que no coexistan dos nodos en pantalla durante la ventana de
+  // 280ms de la anim de salida. Despues creamos siempre uno nuevo
+  // (mejora a11y: SR re-anuncia cuando aparece un nodo nuevo con role=alert).
+  if (_toastEl) {
+    clearTimeout(_toastTimer);
+    _toastEl.remove();
+    _toastEl = null;
+  }
+  _toastEl = document.createElement('div');
+  _toastEl.className = 'toast toast-' + type;
+  _toastEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  _toastEl.textContent = message;
+  _toastEl.addEventListener('click', dismissToast);
+  container.appendChild(_toastEl);
+  requestAnimationFrame(() => _toastEl.classList.add('toast-visible'));
+  _toastTimer = setTimeout(dismissToast, duration);
+}
+function dismissToast() {
+  if (!_toastEl) return;
+  clearTimeout(_toastTimer);
+  _toastEl.classList.remove('toast-visible');
+  _toastEl.classList.add('toast-leaving');
+  const el = _toastEl;
+  _toastEl = null;
+  setTimeout(() => el.remove(), 280);
+}
 function showAuthError(message) {
-  if (!authErrorEl) { logerr('[auth] no #auth-error', message); return; }
-  authErrorEl.textContent = message; authErrorEl.classList.remove('hidden');
+  // Renderizamos como toast flotante (top del viewport, encima
+  // del modal) en vez de inline bajo el form. Razon principal:
+  // en mobile el teclado virtual tapa los mensajes inline. El
+  // toast es visible aunque el teclado este abierto; auto-
+  // dismiss tras 5s; tap para cerrar antes.
+  log('[auth] showAuthError (→ toast):', message);
+  showToast(message, { type: 'error', duration: 5000 });
 }
 // ============================================================
 // submitAuth: handler del <form#auth-form>.

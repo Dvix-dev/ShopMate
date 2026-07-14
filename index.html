@@ -163,7 +163,12 @@
         </button>
       </div>
 
-      <div id="auth-error" class="modal-error hidden" role="alert" aria-live="polite"></div>
+      <!-- auth-error inline ELIMINADO (2026-07-14): los errores del
+           modal auth ahora salen como toast flotante en top del
+           viewport (ver showToast en app.js). Razon: en mobile el
+           teclado virtual tapa los mensajes inline bajo el form.
+           auth-message sigue siendo inline (solo el spinner
+           'Iniciando sesion...' durante el await de Firebase). -->
       <div id="auth-message" class="modal-message hidden" role="status" aria-live="polite"></div>
     </div>
   </div>

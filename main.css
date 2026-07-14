@@ -88,7 +88,7 @@ li span {
 }
 
 button {
-  background-color: #28A745;
+  background-color: #35BDB2;
   color: white;
   border: none;
   padding: 0.5rem 0.8rem;
@@ -97,7 +97,7 @@ button {
 }
 
 button:hover {
-  background-color: #218838;
+  background-color: #2A9B91;
 }
 
 #validar-btn {
@@ -442,25 +442,32 @@ button:hover {
 .modal-password-toggle[aria-pressed="true"]:hover .modal-password-toggle-icon {
   transform: scale(1.08) rotate(-4deg);
 }
-.eye-slash {
-  opacity: 0;
-  transition: opacity 0.18s ease;
-  stroke-dasharray: 28;
-  stroke-dashoffset: 28;     /* dibuja con animación al activarse */
-}.modal-password-toggle[aria-pressed="true"] .modal-pw-slash {
-
+/* Slash visible por defecto (eye "cerrado" / password hidden).
+   aria-pressed=true lo oculta (eye "abierto" / password visible).
+   Transiciones SIMETRICAS para que el toggle se sienta igual de
+   fluido en ambas direcciones. Sin @keyframes/forwards (que
+   sobreescriben el estado base al re-toggle, bug del commit
+   anterior: la regla muerta .eye-slash nunca aplicaba y la
+   animation forwards dejaba el slash siempre visible). */
+.modal-pw-slash {
   opacity: 1;
+  stroke-dasharray: 28;
   stroke-dashoffset: 0;
-  animation: pw-slash-draw 0.25s ease forwards;
+  transition: opacity 0.2s ease, stroke-dashoffset 0.3s ease;
 }
-@keyframes pw-slash-draw {
-  from { stroke-dashoffset: 28; opacity: 0; }
-  to   { stroke-dashoffset: 0;  opacity: 1; }
+.modal-password-toggle[aria-pressed="true"] .modal-pw-slash {
+  opacity: 0;
+  stroke-dashoffset: 28;
+}
+
+/* Pupil encoge ligeramente cuando password visible (feel de
+   "ojo entrecerrado al revelar"). Transicion base + override. */
+.modal-pw-pupil {
+  transition: transform 0.2s ease;
+  transform-origin: 12px 12px;
 }
 .modal-password-toggle[aria-pressed="true"] .modal-pw-pupil {
-  transition: transform 0.2s ease;
   transform: scale(0.85);
-  transform-origin: 12px 12px;
 }
 
 /* Confirm-password group: oculto por defecto.
@@ -481,7 +488,7 @@ button:hover {
 }
 
 .modal-actions button {
-  background-color: #28A745;
+  background-color: #35BDB2;
   color: white;
   border: none;
   padding: 0.6rem 1rem;
@@ -493,7 +500,7 @@ button:hover {
   min-height: 44px;
 }
 .modal-actions button:hover {
-  background-color: #218838;
+  background-color: #2A9B91;
 }
 .modal-actions button:disabled {
   opacity: 0.5;
@@ -591,15 +598,9 @@ button:hover {
   word-break: break-all;
 }
 
-.modal-error {
-  margin-top: 1rem;
-  padding: 0.7rem 0.9rem;
-  background: #fff1f1;
-  border: 1px solid #f6c6c6;
-  border-radius: 8px;
-  color: #b6261a;
-  font-size: 0.9rem;
-}
+/* .modal-error ELIMINADO (2026-07-14): los errores del modal auth
+   ahora salen como toast flotante (ver .toast-error). Este bloque
+   era CSS huérfano tras quitar <div id="auth-error">. */
 
 .modal-message {
   margin-top: 1rem;
@@ -896,4 +897,73 @@ button:hover {
 @media (max-width: 480px) {
   .hamburger-menu { width: 82vw; padding: 1rem; }
   .hamburger-close-btn { width: 44px; height: 44px; font-size: 1.3rem; }
+}
+
+/* =============================================================
+ * TOAST — feedback flotante en top del viewport con auto-dismiss.
+ * Usado por showAuthError (errores del modal auth) en vez del
+ * inline error div que tenia antes. Razon principal: en mobile
+ * el teclado virtual tapa los mensajes inline. El toast vive
+ * POR ENCIMA del modal (z-index 3000 > 2000) y respeta
+ * safe-area-inset-top para notched devices (iPhone X+).
+ * Container unico: si entra un nuevo toast antes de salir el
+ * anterior, JS REUTILIZA el mismo nodo (no se apilan).
+ * Tap para dismiss instantaneo. ARIA: role=alert + aria-live=
+ * assertive para errores; role=status + aria-live=polite para
+ * info/success. Container lleva aria-live=polite como region
+ * umbrella para SR (los hijos pueden sobreescribir a assertive).
+ * ============================================================= */
+.toast-container {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top, 16px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;        /* clicks pasan al modal detras */
+  width: 92%;
+  max-width: 480px;
+}
+.toast {
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: #fff;
+  color: #205746;
+  font-size: 0.95rem;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  line-height: 1.35;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transform: translateY(-16px);
+  transition: opacity 0.22s ease, transform 0.25s ease;
+}
+.toast.toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.toast.toast-leaving {
+  opacity: 0;
+  transform: translateY(-30px);
+}
+.toast-error {
+  background: #fff1f1;
+  border-color: #f6c6c6;
+  color: #b6261a;
+}
+.toast-success {
+  background: #ebf9f7;
+  border-color: #b8e6de;
+  color: #205746;
+}
+.toast-info {
+  background: #eef6fb;
+  border-color: #b8ddef;
+  color: #205746;
 }
