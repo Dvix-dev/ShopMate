@@ -24,7 +24,7 @@
 
 ## 🧾 Descripción
 
-**ShopMate** es una webapp ligera (HTML + CSS + JS puro, sin frameworks ni build step) pensada para que varias personas puedan añadir productos a una misma lista de la compra y marcarlos como comprados en tiempo real desde cualquier dispositivo con navegador. La conversión a PWA completa (manifest + service worker + offline) está planificada en `roadmap.md` → Fase 2.
+**ShopMate** es una webapp ligera (HTML + CSS + JS puro, sin frameworks ni build step) pensada para que varias personas puedan añadir productos a una misma lista de la compra y marcarlos como comprados en tiempo real desde cualquier dispositivo con navegador. Incluye un manifest instalable y un service worker que conserva la interfaz para abrirla sin conexión; las operaciones y datos de Firebase siguen requiriendo conexión.
 
 Toda la información se sincroniza a través de **Firebase Realtime Database**, de modo que cualquier cambio (añadir, marcar o eliminar) se refleja al instante en todos los clientes conectados.
 
@@ -75,7 +75,7 @@ mv list.html index.html
 - 🍔 **Menú hamburguesa (Fase 2.A)**: drawer lateral con 4 secciones — Perfil (read-only), Ajustes (placeholder §1.C/§1.E), **Historial de compras** (acordeón con cada compra agrupada), y Cerrar sesión. Se abre con el botón ☰ de la cabecera; cierra con backdrop, Escape, botón ✕ dentro del drawer o click-fuera. Header del drawer **sticky** (permanece visible al scrollear) y ancho **82vw en mobile** (<480px). Foco gestionado para accesibilidad (a11y: foco al close button al abrir, devuelto al ☰ al cerrar, focus trap Tab/Shift+Tab).
 - 📜 **Historial de compras (Fase 2.A, modo compat)**: cada "Validar compra" archiva los items marcados a `/shared/compras/{pushId}/{fecha, items}` y los borra de `/items/`. Las compras se ven agrupadas en acordeón (collapsed por defecto). Cap auto-trim a 20 compras (las más antiguas se borran). Cuando llegue §1.E Familias, los datos se migrarán a `/families/{fid}/compras/` con script atómico.
 
-> 📝 **Nota:** el proyecto aún **no es PWA completa** (sin `manifest.json` ni service worker); ese trabajo está planificado en `roadmap.md` → Fase 2. La versión inicial (`087a2fd`) sí guardaba en `localStorage` como fallback, pero la build Firebase actual no conserva esa capa offline.
+> 📲 **PWA:** ShopMate puede instalarse desde navegadores compatibles. El service worker cachea la interfaz y recursos estáticos para abrir la app offline; la lista compartida no está guardada localmente y vuelve a sincronizarse al recuperar conexión.
 
 ---
 
@@ -143,12 +143,15 @@ ShopMate/
 ├── database.rules.json       # Reglas RTDB endurecidas (pendiente de deploy con firebase-tools)
 ├── firebase.json             # Config de firebase-tools (auth+DB+UI emulators + database.rules.json)
 ├── .firebaserc               # Alias de proyecto: shopmate-e9195
-├── index.html                # Página principal (renombrada desde list.html)
+├── index.html                # Página principal y registro del service worker
+├── manifest.json             # Metadatos e iconos para instalación PWA
+├── sw.js                     # Caché de la interfaz y recursos estáticos
 ├── app.js                    # Lógica + integración Firebase (importa config del loader, sin claves)
 ├── main.css                  # Estilos
 └── assets/
-    ├── icon.ico              # Favicon  ⚠️ vacío en repo
-    └── logo.png              # Logo de cabecera  ⚠️ vacío en repo
+    ├── app-icon.png          # Icono PWA de 50×50 px
+    ├── icon.ico              # Favicon
+    └── logo.png              # Logo de cabecera
 ```
 
 ---

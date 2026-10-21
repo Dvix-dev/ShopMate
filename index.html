@@ -4,12 +4,16 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#35BDB2">
+    <meta name="description" content="Lista de compra conjunta en tiempo real.">
     <meta name="author" content="David Escutia de Haro">
     <meta name="author" content="Dvix">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
     <link rel="shortcut icon" href="assets/icon.ico" type="image/x-icon">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="assets/app-icon.png">
     <link rel="stylesheet" href="main.css">
     <title>ShopMate</title>
 </head>
@@ -234,6 +238,15 @@
   </div>
 
   <!-- ?v=3 cache-bust: si vuelves a tocar app.js, bumpea la query string. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((error) => {
+          console.warn('[pwa] No se pudo registrar el service worker:', error);
+        });
+      });
+    }
+  </script>
   <script type="module" src="app.js?v=3"></script>
 </body>
 </html>

@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "ShopMate",
+  "short_name": "ShopMate",
+  "description": "Lista de compra conjunta en tiempo real.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#efefef",
+  "theme_color": "#35BDB2",
+  "icons": [
+    {
+      "src": "assets/app-icon.png",
+      "sizes": "50x50",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -160,17 +160,10 @@
 
 ### 2.B — PWA completa
 
-- [ ] **`manifest.json`**:
-  - `name`: ShopMate
-  - `short_name`: ShopMate
-  - `theme_color`: `#35BDB2`
-  - `background_color`: `#efefef`
-  - `icons`: `icon-192.png`, `icon-512.png` (requiere assets reales).
-- [ ] **`sw.js`** (Service Worker):
-  - Cache estático (`index.html`, `app.js`, `main.css`, `manifest.json`).
-  - Network-first para `/families/...` (datos RTDB).
-  - Fallback offline mostrando lista cacheada de la última sesión.
-- [ ] **HTML head**: `<link rel="manifest">` + `register sw.js`.
+- [x] **`manifest.json`**: identidad ShopMate, colores de marca y modo standalone. Declara el icono existente `assets/app-icon.png` con su tamaño real (50×50 px). Para cumplir el requisito de instalación promovida en Chromium aún hace falta aportar iconos de 192×192 y 512×512.
+- [x] **`sw.js`** (Service Worker): cachea la interfaz, el manifest y recursos estáticos; sirve el shell al navegar sin conexión. Firebase Auth/Realtime Database y otras APIs nunca se cachean. Se conservan recursos estáticos cacheados tras una carga online.
+- [x] **HTML head**: enlace al manifest, icono Apple (`assets/app-icon.png`) y registro del service worker.
+- [ ] **Datos offline**: guardar una copia local segura de la lista para mostrarla sin conexión y reconciliar cambios al volver online. La PWA actual permite abrir la interfaz offline, pero las operaciones y datos sincronizados siguen requiriendo red.
 
 ### 2.C — App Android nativa (**Capacitor**)
 
