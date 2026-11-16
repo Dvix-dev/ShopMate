@@ -205,7 +205,7 @@
 
 - [ ] Atajos de teclado: `Cmd/Ctrl+K` (focus input), `Espacio` (marcar), `Cmd/Ctrl+Shift+Enter` (validar).
 - [ ] Edición inline (doble click sobre el nombre → input editable).
-- [ ] **Drag-to-reorder items** [DEFERIDO 2026-07-14 por complejidad]. **Por que es complejo**:
+- [x] **Drag-to-reorder items** [IMPLEMENTADO 2026-11-16]. Handle `⠿` por fila + campo `sortIndex` + pointer events + multipath `update` (detalle en `contexto.md` §18.1). **Notas originales de complejidad (2026-07-14)**:
   1. **Schema migration obligatoria**: RTDB JSON objects NO tienen orden implicito. Reordenar via DOM no persiste — cada `onValue` re-renderiza con el orden de push keys. Solución: añadir campo `sortIndex` (LexoHash fraccional o decimal inteligente) a cada item + reescribir el sortIndex en cada drag. Esto requiere `multipath update` a RTDB, no single-set.
   2. **Touch event integration full-custom**: HTML5 drag-and-drop API esta roto en mobile (no dispara en touch). Hay que usar `pointer events` + mantener el ghost element durante el drag + hit-testing contra las otras filas para calcular la posicion de insercion + mantener la animacion visual del "ghost" (placeholder row que se mueve para indicar donde caera el item).
   3. **Conflict resolution entre 2 usuarios**: si dos users arrastran items a la vez, sus sortIndex locales se solapan y el ultimo write gana (puede pisar al otro). Last-write-wins con un toast informativo "Otro usuario reordeno mientras tanto" es aceptable para ShopMate familiar. Soluciones serias (CRDT/OT) son overkill.
