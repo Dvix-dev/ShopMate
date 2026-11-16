@@ -17,6 +17,10 @@
 
         "nota": {
           ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 500)"
+        },
+
+        "sortIndex": {
+          ".validate": "!newData.exists() || newData.isNumber()"
         }
       },
 

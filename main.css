@@ -1242,3 +1242,33 @@ button:hover {
   .item-edit-save,
   .item-edit-cancel   { padding: 0.55rem 0.85rem; min-width: 0; flex: 1; }
 }
+
+/* =============================================================
+ * DRAG-TO-REORDER (§2.D - 2026-11-16)
+ * El agarre es un handle dedicado (⠿) para no pisar el long-press
+ * (500ms) que abre el menu contextual: el pointerdown del handle
+ * corta la burbuja y nunca arranca el timer del wrapper.
+ * touch-action:none impide que el navegador scrollee la pagina
+ * mientras se arrastra el item (clave en mobile).
+ * ============================================================= */
+.list-item .drag-handle {
+  margin-left: auto;          /* pegado a la derecha de la fila */
+  padding: 8px 4px 8px 12px;  /* target tactil amplio sin mover el texto */
+  font-size: 1.1rem;
+  line-height: 1;
+  color: #9aa8a3;             /* muted: affordance discreta */
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.list-item .drag-handle:active {
+  cursor: grabbing;
+  color: #35BDB2;
+}
+.list-item.dragging {
+  opacity: 0.55;
+  background: #eaf7f4;
+  border-radius: 8px;
+}

@@ -135,20 +135,64 @@ let currentItemCount = 0;
 log('[cap] MAX_ITEMS', MAX_ITEMS, 'MAX_COMPRAS', MAX_COMPRAS);
 
 // ============================================================
+// Orden persistente de la lista (§2.D drag-to-reorder)
+// RTDB no ordena objetos JSON: sin un campo explicito cada
+// onValue devuelve las filas en orden de push key. `sortIndex`
+// guarda el orden manual que escribe el drag.
+//   - Items con sortIndex numerico: se ordenan por ese valor.
+//   - Items legacy (sin sortIndex): caen al timestamp embebido en
+//     la push key (8 chars base36 = ms epoch), que reproduce el
+//     orden cronologico que ya teniamos. Asi nada se descoloca
+//     hasta el primer reordenamiento.
+// Valores densos (n * SORT_STEP) tras cada reorder; los items
+// nuevos usan Date.now() para ir al final (ver addItem).
+// ============================================================
+const SORT_STEP = 1000;
+let _dragActive      = false;   // true mientras el user arrastra una fila
+let _pendingSnapshot = null;    // snapshot diferido si onValue llega en pleno drag
+let _lastOrderKeys   = [];      // ultimo orden renderizado (evita writes no-op)
+
+function keyTimeMillis(key) {
+  const ms = parseInt(String(key || '').slice(0, 8), 36);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function sortValueFor(key, item) {
+  const si = item && item.sortIndex;
+  if (typeof si === 'number' && Number.isFinite(si)) return si;
+  return keyTimeMillis(key);
+}
+
+// ============================================================
 // Renderizado de la lista activa
 // ============================================================
 function renderLista(snapshot) {
   log('[render] snapshot recibido, hijos:', snapshot.size);
+  // Si el user esta arrastrando una fila NO re-renderizamos: innerHTML=''
+  // destruiria el nodo que tiene el dedo encima. Diferimos el snapshot y
+  // se pinta al soltar (ver attachItemDrag -> onEnd).
+  if (_dragActive) {
+    _pendingSnapshot = snapshot;
+    log('[render] diferido: drag en curso');
+    return;
+  }
   checklistEl.innerHTML = '';
   let hayMarcados = false;
 
+  // Orden estable: sortIndex manual, con fallback a la push key. Array.sort
+  // es estable, asi que los empates conservan el orden de push key.
+  const rows = [];
   snapshot.forEach(childSnapshot => {
-    const key = childSnapshot.key;
-    const item = childSnapshot.val();
+    rows.push({ key: childSnapshot.key, item: childSnapshot.val() });
+  });
+  rows.sort((a, b) => sortValueFor(a.key, a.item) - sortValueFor(b.key, b.item));
+
+  rows.forEach(({ key, item }) => {
     log('[render] item', key, item);
 
     const wrapper = document.createElement('div');
     wrapper.classList.add('list-item');
+    wrapper.dataset.key = key;              // lo usa persistOrder() al soltar
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'center';
 
@@ -193,6 +237,17 @@ function renderLista(snapshot) {
       wrapper.appendChild(notaIcon);
     }
 
+    // Handle de arrastre (§2.D). Va en su propio agarre para que el
+    // long-press (500ms -> menu contextual) siga siendo independiente:
+    // el pointerdown del handle corta la burbuja y nunca arranca el timer.
+    const dragHandle = document.createElement('span');
+    dragHandle.className = 'drag-handle';
+    dragHandle.textContent = '⠿';
+    dragHandle.title = 'Arrastrar para reordenar';
+    dragHandle.setAttribute('aria-hidden', 'true');   // decorativo: el SR ya lee la lista
+    wrapper.appendChild(dragHandle);
+    attachItemDrag(dragHandle, wrapper, key);
+
     // Long-press → context menu (Editar/Eliminar). Adjuntamos en el wrapper,
     // no en cada hijo, para tener un solo timer y no interferir con el
     // click del checkbox o del nota-icon. El cancel-on-move distingue
@@ -202,6 +257,7 @@ function renderLista(snapshot) {
 
   validarBtn.style.display = hayMarcados ? 'block' : 'none';
   currentItemCount = snapshot.size;
+  _lastOrderKeys = rows.map(row => row.key);
   log('[render] hayMarcados', hayMarcados, 'currentItemCount', currentItemCount);
 }
 
@@ -222,7 +278,8 @@ function addItem() {
     warn('[add] cap MAX_ITEMS alcanzado -> abort', { currentItemCount, MAX_ITEMS });
     return;
   }
-  const payload = { nombre, comprado: false, nota };
+  // sortIndex: Date.now() = append al final (ver bloque "Orden persistente").
+  const payload = { nombre, comprado: false, nota, sortIndex: Date.now() };
   log('[add] pushing a /items', payload);
   push(ref(db, 'items'), payload)
     .then(ref => log('[add] OK ref=', ref.key))
@@ -620,6 +677,100 @@ function attachItemRowActions(wrapper, key, item) {
 }
 
 // ============================================================
+// attachItemDrag (§2.D): reordenar arrastrando el handle ⠿.
+// HTML5 drag&drop no dispara en touch, asi que usamos pointer
+// events sobre `window` durante el gesto (el dedo puede salirse
+// del handle sin cortar el arrastre). El `touch-action: none`
+// del handle evita que el navegador scrollee mientras arrastras.
+// Estrategia: movemos el propio .list-item en el DOM
+// (insertBefore) cuando el puntero cruza el punto medio de otra
+// fila; al soltar, persistOrder() reescribe sortIndex de todas.
+// ============================================================
+function attachItemDrag(handle, wrapper, key) {
+  let dragging = false;
+
+  function onMove(e) {
+    if (!dragging) return;
+    const y = e.clientY;
+    // Copia de la lista: insertBefore muta checklistEl dentro del loop.
+    const rows = Array.from(checklistEl.querySelectorAll('.list-item'));
+    for (const sib of rows) {
+      if (sib === wrapper) continue;
+      const rect = sib.getBoundingClientRect();
+      const mid  = rect.top + rect.height / 2;
+      // ¿La fila arrastrada esta DESPUES de sib en el DOM?
+      const wrapperIsAfter = !!(sib.compareDocumentPosition(wrapper) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (y < mid && wrapperIsAfter) {
+        checklistEl.insertBefore(wrapper, sib);
+      } else if (y > mid && !wrapperIsAfter) {
+        checklistEl.insertBefore(wrapper, sib.nextSibling);
+      }
+    }
+  }
+
+  function onEnd() {
+    if (!dragging) return;
+    dragging = false;
+    _dragActive = false;
+    wrapper.classList.remove('dragging');
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onEnd);
+    window.removeEventListener('pointercancel', onEnd);
+    log('[drag] end', key);
+    persistOrder();
+    // Si llego un snapshot mientras arrastrabamos, pintarlo ahora.
+    if (_pendingSnapshot) {
+      const snap = _pendingSnapshot;
+      _pendingSnapshot = null;
+      renderLista(snap);
+    }
+  }
+
+  handle.addEventListener('pointerdown', e => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();        // no arrancar el long-press del wrapper
+    dragging = true;
+    _dragActive = true;
+    wrapper.classList.add('dragging');
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+    log('[drag] start', key);
+  });
+
+  // El click residual del release no debe abrir nada (ni el popup de nota).
+  handle.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+}
+
+// ============================================================
+// persistOrder: lee el orden actual del DOM y lo escribe en RTDB
+// como multipath update (`{ key/sortIndex: n }` en una sola
+// operacion). Si el orden no cambio, no escribe nada.
+// Conflicto entre dos users arrastrando a la vez: last-write-wins
+// (aceptable en uso familiar, ver roadmap §2.D).
+// ============================================================
+async function persistOrder() {
+  const keys = Array.from(checklistEl.querySelectorAll('.list-item'))
+    .map(el => el.dataset.key)
+    .filter(Boolean);
+  if (keys.length < 2) return;
+  const unchanged = keys.length === _lastOrderKeys.length &&
+                    keys.every((k, i) => k === _lastOrderKeys[i]);
+  if (unchanged) { log('[drag] orden sin cambios, no persist'); return; }
+  const updates = {};
+  keys.forEach((k, i) => { updates[k + '/sortIndex'] = i * SORT_STEP; });
+  try {
+    await update(ref(db, 'items'), updates);
+    _lastOrderKeys = keys;
+    log('[drag] orden persistido', keys.length, 'items');
+  } catch (err) {
+    logerr('[drag] persist ERROR', err && err.code, err && err.message);
+    showToast('No pudimos guardar el nuevo orden.', { type: 'error' });
+  }
+}
+
+// ============================================================
 // showItemActions / hideItemActions: abren y cierran el menu
 // contextual. En la apertura, capturamos snapshot del item para
 // soportar undo tras delete. En el cierre limpiamos flags si NO
@@ -793,6 +944,9 @@ async function deleteItem() {
               comprado: !!snapshot.comprado,
             };
             if (snapshot.nota) payload.nota = snapshot.nota;
+            // Preservar la posicion manual: sin esto el item restaurado
+            // saltaria al final del orden reordenado.
+            if (typeof snapshot.sortIndex === 'number') payload.sortIndex = snapshot.sortIndex;
             await set(ref(db, 'items/' + key), payload);
             log('[item-delete] undo OK, restored', key);
             showToast('Item restaurado.', { type: 'success', duration: 2200 });
