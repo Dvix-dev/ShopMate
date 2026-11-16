@@ -140,6 +140,10 @@ button:hover {
   padding: 0.5rem;
   border: 1px solid #d8dad8;
   border-radius: 5px 0 0 5px;
+  /* 16px explicitos: por debajo de eso iOS Safari hace auto-zoom al enfocar
+     y descoloca el layout. El body no declara font-size, asi que esto solo
+     hace explicito el 16px que ya se heredaba (sin cambio visual). */
+  font-size: 16px;
 }
 
 .input-group button {
@@ -335,7 +339,13 @@ button:hover {
   background-color: rgba(15, 30, 28, 0.85);     /* más oscuro que .popup (fullscreen bloqueante) */
   display: flex;
   align-items: center;
+  /* safe center: si la card no cabe en el alto visible (teclado abierto con
+     interactive-widget=resizes-content) alinea arriba y permite scrollear el
+     overlay, en vez de recortarla por arriba y por abajo. Navegadores sin
+     soporte de `safe` ignoran la linea y mantienen el center de arriba. */
+  align-items: safe center;
   justify-content: center;
+  overflow-y: auto;
   z-index: 2000;                                 /* por encima del .popup de notas */
   padding: 1rem;
 }
