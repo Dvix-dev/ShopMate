@@ -818,8 +818,12 @@ function hideItemActions() {
 // ============================================================
 async function openItemEdit() {
   const key = _actionItemKey;
-  hideItemActions();
+  hideItemActions();          // oculta el menu contextual (y limpia _actionItemKey)
   if (!key || !itemEditPopupEl) return;
+  // Restaurar la key: hideItemActions() la pone a null y saveItemEdit()
+  // la necesita al guardar. Sin esto el save abortaba con
+  // "save sin _actionItemKey" y los cambios se perdian en silencio.
+  _actionItemKey = key;
   try {
     const snapshot = await get(ref(db, 'items/' + key));
     const item = snapshot.val();
@@ -898,6 +902,10 @@ function hideItemEditPopup() {
   // Limpiar valores defensive (no leak data del item en el DOM).
   if (itemEditNameEl) itemEditNameEl.value = '';
   if (itemEditNoteEl) itemEditNoteEl.value = '';
+  // Cerrar el editor invalida la accion en curso: si no limpiamos la key,
+  // un save posterior (o el undo) trabajaria sobre un item que ya no se
+  // esta editando.
+  _actionItemKey = null;
   _actionInProgress = false;
 }
 

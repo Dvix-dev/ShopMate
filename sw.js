@@ -1,9 +1,9 @@
-const CACHE_NAME = 'shopmate-pwa-v5';
+const CACHE_NAME = 'shopmate-pwa-v6';
 const APP_SHELL = [
   './',
   './index.html',
   './main.css',
-  './app.js?v=4',
+  './app.js?v=5',
   './firebase-config.js',
   './firebase-config.example.js',
   './manifest.json',
