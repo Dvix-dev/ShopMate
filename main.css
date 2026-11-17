@@ -221,20 +221,29 @@ button:hover {
   content: "";
   position: absolute;
   height: 2px;
+  width: 0;                       /* se dibuja con la animacion (width) */
   background: var(--check);
   border-radius: 2px;
+  transform-origin: left center;  /* el brazo crece desde ese extremo */
 }
 
+/* Brazo corto: baja desde la izquierda hasta el vertice del tick.
+   Origen de rotacion (2, 10); con rotate(45deg) y width 4 termina
+   en (4.83, 12.83). */
 #checklist input[type="checkbox"]::before {
-  width: 0px;
-  right: 60%;
-  transform-origin: right bottom;
+  top: 9px;
+  left: 2px;
+  transform: rotate(45deg);
 }
 
+/* Brazo largo: sube desde el vertice hacia la derecha.
+   Origen (4.8, 12.8) = mismo punto donde acaba el brazo corto, asi
+   que los dos forman un tick continuo (90deg) en vez de dos lineas
+   sueltas en alturas distintas. Termina en (11.16, 6.44). */
 #checklist input[type="checkbox"]::after {
-  width: 0px;
-  left: 40%;
-  transform-origin: left bottom;
+  top: 11.8px;
+  left: 4.8px;
+  transform: rotate(-45deg);
 }
 
 #checklist input[type="checkbox"]:checked::before {
@@ -262,8 +271,11 @@ button:hover {
 /* Animaciones originales */
 @keyframes move { 50% { padding-left: 8px; } 100% { padding-right: 4px; } }
 @keyframes slice { 60% { width: 100%; left: 4px; } 100% { width: 100%; left: -2px; top: 14px; } }
-@keyframes check-01 { 51% { width: 0px; top: 8px; transform: rotate(45deg); } 100% { width: 5px; top: 16px; transform: rotate(45deg); } }
-@keyframes check-02 { 51% { width: 0px; top: 8px; transform: rotate(-45deg); } 100% { width: 10px; top: 10px; transform: rotate(-45deg); } }
+/* Tick: cada brazo se dibuja creciendo en width desde su extremo fijo.
+   Ya no animamos `top` (era lo que descolocaba los brazos a mitad de
+   animacion y los dejaba como dos lineas separadas). */
+@keyframes check-01 { to { width: 4px; } }
+@keyframes check-02 { to { width: 9px; } }
 @keyframes firework { 0% { opacity: 1; box-shadow: 0 0 0 -2px var(--check), 0 0 0 -2px var(--check); } 100% { opacity: 0; box-shadow: 0 -15px 0 0px var(--check), 14px -8px 0 0px var(--check); } }
 
 /* =============================================================
